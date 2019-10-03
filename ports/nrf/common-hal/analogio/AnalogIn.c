@@ -3,8 +3,8 @@
  *
  * The MIT License (MIT)
  *
+ * Copyright (c) 2019 Dan Halbert for Adafruit Industries
  * Copyright (c) 2016 Scott Shawcroft for Adafruit Industries
- * Copyright (c) 2018 Artur Pacholec
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -67,8 +67,8 @@ uint16_t common_hal_analogio_analogin_get_value(analogio_analogin_obj_t *self) {
     const nrf_saadc_channel_config_t config = {
         .resistor_p = NRF_SAADC_RESISTOR_DISABLED,
         .resistor_n = NRF_SAADC_RESISTOR_DISABLED,
-        .gain = NRF_SAADC_GAIN1_6,
-        .reference = NRF_SAADC_REFERENCE_INTERNAL,
+        .gain = NRF_SAADC_GAIN1_4,
+        .reference = NRF_SAADC_REFERENCE_VDD4,
         .acq_time = NRF_SAADC_ACQTIME_3US,
         .mode = NRF_SAADC_MODE_SINGLE_ENDED,
         .burst = NRF_SAADC_BURST_DISABLED,
@@ -108,5 +108,6 @@ uint16_t common_hal_analogio_analogin_get_value(analogio_analogin_obj_t *self) {
 }
 
 float common_hal_analogio_analogin_get_reference_voltage(analogio_analogin_obj_t *self) {
+    // The nominal VCC voltage
     return 3.3f;
 }
