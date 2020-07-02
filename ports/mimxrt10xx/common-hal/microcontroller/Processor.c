@@ -37,11 +37,13 @@ float common_hal_mcu_processor_get_temperature(void) {
     tempmon_config_t config;
     TEMPMON_GetDefaultConfig(&config);
 
+    OCOTP_Init(OCOTP, CLOCK_GetFreq(kCLOCK_IpgClk));
     TEMPMON_Init(TEMPMON, &config);
     TEMPMON_StartMeasure(TEMPMON);
 
     const float temp = TEMPMON_GetCurrentTemperature(TEMPMON);
     TEMPMON_Deinit(TEMPMON);
+    OCOTP_Deinit(OCOTP);
 
     return temp;
 }
@@ -58,8 +60,13 @@ void common_hal_mcu_processor_get_uid(uint8_t raw_id[]) {
     OCOTP_Init(OCOTP, CLOCK_GetFreq(kCLOCK_IpgClk));
 
     // Reads shadow registers 0x01 - 0x04 (Configuration and Manufacturing Info)
-    for (int i = 0; i < 4; ++i)
-        ((uint32_t*) raw_id)[i] = OCOTP_ReadFuseShadowRegister(OCOTP, i + 1);
-
+    // into 8 bit wide destination, avoiding punning.
+    for (int i = 0; i < 4; ++i) {
+        uint32_t wr = OCOTP_ReadFuseShadowRegister(OCOTP, i + 1);
+        for (int j = 0; j < 4; j++) {
+            raw_id[i*4+j] = wr & 0xff;
+            wr >>= 8;
+        }
+    }
     OCOTP_Deinit(OCOTP);
 }

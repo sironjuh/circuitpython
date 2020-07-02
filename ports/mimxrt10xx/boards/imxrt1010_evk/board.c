@@ -27,24 +27,23 @@
 
 #include "boards/board.h"
 #include "mpconfigboard.h"
-#include "fsl_iomuxc.h"
+#include "shared-bindings/microcontroller/Pin.h"
 
 void board_init(void) {
-    IOMUXC_SetPinMux(IOMUXC_GPIO_SD_06_FLEXSPI_A_SS0_B, 1U);
-    IOMUXC_SetPinMux(IOMUXC_GPIO_SD_07_FLEXSPI_A_DATA1,1U);
-    IOMUXC_SetPinMux(IOMUXC_GPIO_SD_08_FLEXSPI_A_DATA2, 1U);
-    IOMUXC_SetPinMux(IOMUXC_GPIO_SD_09_FLEXSPI_A_DATA0, 1U);
-    IOMUXC_SetPinMux(IOMUXC_GPIO_SD_10_FLEXSPI_A_SCLK, 1U);
-    IOMUXC_SetPinMux(IOMUXC_GPIO_SD_11_FLEXSPI_A_DATA3, 1U);
-    IOMUXC_SetPinMux(IOMUXC_GPIO_SD_12_FLEXSPI_A_DQS, 1U);
-
-    IOMUXC_SetPinConfig(IOMUXC_GPIO_SD_06_FLEXSPI_A_SS0_B,0x10E1U);
-    IOMUXC_SetPinConfig(IOMUXC_GPIO_SD_07_FLEXSPI_A_DATA1, 0x10E1U);
-    IOMUXC_SetPinConfig(IOMUXC_GPIO_SD_08_FLEXSPI_A_DATA2, 0x10E1U);
-    IOMUXC_SetPinConfig(IOMUXC_GPIO_SD_09_FLEXSPI_A_DATA0, 0x10E1U);
-    IOMUXC_SetPinConfig(IOMUXC_GPIO_SD_10_FLEXSPI_A_SCLK, 0x10E1U);
-    IOMUXC_SetPinConfig(IOMUXC_GPIO_SD_11_FLEXSPI_A_DATA3, 0x10E1U);
-    IOMUXC_SetPinConfig(IOMUXC_GPIO_SD_12_FLEXSPI_A_DQS, 0x10E1U);
+    // SWD Pins
+    common_hal_never_reset_pin(&pin_GPIO_AD_13); //SWDIO
+    common_hal_never_reset_pin(&pin_GPIO_AD_12); //SWCLK
+    // FLEX flash
+    common_hal_never_reset_pin(&pin_GPIO_SD_12);
+    common_hal_never_reset_pin(&pin_GPIO_SD_11);
+    common_hal_never_reset_pin(&pin_GPIO_SD_10);
+    common_hal_never_reset_pin(&pin_GPIO_SD_09);
+    common_hal_never_reset_pin(&pin_GPIO_SD_08);
+    common_hal_never_reset_pin(&pin_GPIO_SD_07);
+    common_hal_never_reset_pin(&pin_GPIO_SD_06);
+    // USB Pins
+    common_hal_never_reset_pin(&pin_GPIO_12);
+    common_hal_never_reset_pin(&pin_GPIO_13);
 }
 
 bool board_requests_safe_mode(void) {

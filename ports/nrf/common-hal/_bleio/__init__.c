@@ -89,13 +89,16 @@ void check_sec_status(uint8_t sec_status) {
 
 // Turn off BLE on a reset or reload.
 void bleio_reset() {
-    bleio_adapter_reset(&common_hal_bleio_adapter_obj);
-    if (!vm_used_ble) {
+    if (!common_hal_bleio_adapter_get_enabled(&common_hal_bleio_adapter_obj)) {
         return;
     }
-    if (common_hal_bleio_adapter_get_enabled(&common_hal_bleio_adapter_obj)) {
-        common_hal_bleio_adapter_set_enabled(&common_hal_bleio_adapter_obj, false);
+    bleio_adapter_reset(&common_hal_bleio_adapter_obj);
+    if (!vm_used_ble) {
+        // No user-code BLE operations were done, so we can maintain the supervisor state.
+        return;
     }
+    common_hal_bleio_adapter_set_enabled(&common_hal_bleio_adapter_obj, false);
+    bonding_reset();
     supervisor_start_bluetooth();
 }
 
@@ -115,8 +118,8 @@ void common_hal_bleio_check_connected(uint16_t conn_handle) {
 
 // GATTS read of a Characteristic or Descriptor.
 size_t common_hal_bleio_gatts_read(uint16_t handle, uint16_t conn_handle, uint8_t* buf, size_t len) {
-    // conn_handle might be BLE_CONN_HANDLE_INVALID if we're not connected, but that's OK, because
-    // we can still read and write the local value.
+    // conn_handle is ignored unless this is a system attribute.
+    // If we're not connected, that's OK, because we can still read and write the local value.
 
     ble_gatts_value_t gatts_value = {
         .p_value = buf,
@@ -129,8 +132,8 @@ size_t common_hal_bleio_gatts_read(uint16_t handle, uint16_t conn_handle, uint8_
 }
 
 void common_hal_bleio_gatts_write(uint16_t handle, uint16_t conn_handle, mp_buffer_info_t *bufinfo) {
-    // conn_handle might be BLE_CONN_HANDLE_INVALID if we're not connected, but that's OK, because
-    // we can still read and write the local value.
+    // conn_handle is ignored unless this is a system attribute.
+    // If we're not connected, that's OK, because we can still read and write the local value.
 
     ble_gatts_value_t gatts_value = {
         .p_value = bufinfo->buf,
@@ -194,14 +197,17 @@ size_t common_hal_bleio_gattc_read(uint16_t handle, uint16_t conn_handle, uint8_
     while (nrf_error == NRF_ERROR_BUSY) {
         nrf_error = sd_ble_gattc_read(conn_handle, handle, 0);
     }
-    check_nrf_error(nrf_error);
+    if (nrf_error != NRF_SUCCESS) {
+        ble_drv_remove_event_handler(_on_gattc_read_rsp_evt, &read_info);
+        check_nrf_error(nrf_error);
+    }
 
     while (!read_info.done) {
         RUN_BACKGROUND_TASKS;
     }
-    check_gatt_status(read_info.status);
 
     ble_drv_remove_event_handler(_on_gattc_read_rsp_evt, &read_info);
+    check_gatt_status(read_info.status);
     return read_info.final_len;
 }
 

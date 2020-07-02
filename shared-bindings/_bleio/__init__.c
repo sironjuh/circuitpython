@@ -41,13 +41,7 @@
 #include "shared-bindings/_bleio/Service.h"
 #include "shared-bindings/_bleio/UUID.h"
 
-//| :mod:`_bleio` --- Bluetooth Low Energy (BLE) communication
-//| ================================================================
-//|
-//| .. module:: _bleio
-//|   :synopsis: Bluetooth Low Energy functionality
-//|   :platform: nRF
-//|
+//| """
 //| The `_bleio` module provides necessary low-level functionality for communicating
 //| using Bluetooth Low Energy (BLE). The '_' prefix indicates this module is meant
 //| for internal use by libraries but not by the end user. Its API may change incompatibly
@@ -58,34 +52,17 @@
 //| provides higher-level convenience functionality, including predefined beacons, clients,
 //| servers.
 //|
-//| Libraries
-//|
-//| .. toctree::
-//|     :maxdepth: 3
-//|
-//|     Address
-//|     Adapter
-//|     Attribute
-//|     Characteristic
-//|     CharacteristicBuffer
-//|     Connection
-//|     Descriptor
-//|     PacketBuffer
-//|     ScanEntry
-//|     ScanResults
-//|     Service
-//|     UUID
-//|
 //| .. attribute:: adapter
 //|
 //|   BLE Adapter used to manage device discovery and connections.
-//|   This object is the sole instance of `_bleio.Adapter`.
+//|   This object is the sole instance of `_bleio.Adapter`."""
 //|
 
-//| .. class:: BluetoothError(Exception)
-//|
-//|   Catch all exception for Bluetooth related errors.
-//|
+
+//| class BluetoothError:
+//|     def __init__(self, Exception: Any):
+//|         """Catch all exception for Bluetooth related errors."""
+//|         ...
 MP_DEFINE_BLEIO_EXCEPTION(BluetoothError, Exception)
 
 NORETURN void mp_raise_bleio_BluetoothError(const compressed_string_t* fmt, ...) {
@@ -95,10 +72,10 @@ NORETURN void mp_raise_bleio_BluetoothError(const compressed_string_t* fmt, ...)
     va_end(argptr);
     nlr_raise(exception);
 }
-
-//| .. class:: ConnectionError(BluetoothError)
-//|
-//|   Raised when a connection is unavailable.
+//| class ConnectionError:
+//|     def __init__(self, BluetoothError: Any):
+//|         """Raised when a connection is unavailable."""
+//|         ...
 //|
 MP_DEFINE_BLEIO_EXCEPTION(ConnectionError, bleio_BluetoothError)
 NORETURN void mp_raise_bleio_ConnectionError(const compressed_string_t* fmt, ...) {
@@ -109,19 +86,20 @@ NORETURN void mp_raise_bleio_ConnectionError(const compressed_string_t* fmt, ...
     nlr_raise(exception);
 }
 
-//| .. class:: RoleError(BluetoothError)
-//|
-//|   Raised when a resource is used as the mismatched role. For example, if a local CCCD is
-//|   attempted to be set but they can only be set when remote.
+//| class RoleError:
+//|     def __init__(self, BluetoothError: Any):
+//|         """Raised when a resource is used as the mismatched role. For example, if a local CCCD is
+//|         attempted to be set but they can only be set when remote."""
+//|         ...
 //|
 MP_DEFINE_BLEIO_EXCEPTION(RoleError, bleio_BluetoothError)
 NORETURN void mp_raise_bleio_RoleError(const compressed_string_t* msg) {
     mp_raise_msg(&mp_type_bleio_RoleError, msg);
 }
-
-//| .. class:: SecurityError(BluetoothError)
-//|
-//|   Raised when a security related error occurs.
+//| class SecurityError:
+//|     def __init__(self, BluetoothError: Any):
+//|         """Raised when a security related error occurs."""
+//|         ...
 //|
 MP_DEFINE_BLEIO_EXCEPTION(SecurityError, bleio_BluetoothError)
 NORETURN void mp_raise_bleio_SecurityError(const compressed_string_t* fmt, ...) {
@@ -131,6 +109,14 @@ NORETURN void mp_raise_bleio_SecurityError(const compressed_string_t* fmt, ...) 
     va_end(argptr);
     nlr_raise(exception);
 }
+
+// Called when _bleio is imported.
+STATIC mp_obj_t bleio___init__(void) {
+    common_hal_bleio_adapter_set_enabled(&common_hal_bleio_adapter_obj, true);
+    return mp_const_none;
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_0(bleio___init___obj, bleio___init__);
+
 
 STATIC const mp_rom_map_elem_t bleio_module_globals_table[] = {
     // Name must be the first entry so that the exception printing below is correct.
@@ -156,6 +142,10 @@ STATIC const mp_rom_map_elem_t bleio_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_ConnectionError),     MP_ROM_PTR(&mp_type_bleio_ConnectionError) },
     { MP_ROM_QSTR(MP_QSTR_RoleError),           MP_ROM_PTR(&mp_type_bleio_RoleError) },
     { MP_ROM_QSTR(MP_QSTR_SecurityError),       MP_ROM_PTR(&mp_type_bleio_SecurityError) },
+
+    // Initialization
+    { MP_ROM_QSTR(MP_QSTR___init__),            MP_ROM_PTR(&bleio___init___obj) },
+
 };
 
 STATIC MP_DEFINE_CONST_DICT(bleio_module_globals, bleio_module_globals_table);

@@ -29,92 +29,57 @@
 #include "py/runtime.h"
 #include "py/objproperty.h"
 
-#include "types.h"
-#include "__init__.h"
-
-#include "PixelBuf.h"
-#include "../../shared-module/_pixelbuf/PixelBuf.h"
+#include "shared-bindings/_pixelbuf/__init__.h"
+#include "shared-bindings/_pixelbuf/PixelBuf.h"
 
 
-//| :mod:`_pixelbuf` --- Fast RGB(W) pixel buffer and helpers
-//| ===========================================================
-
-//| .. module:: _pixelbuf
-//|   :synopsis: A fast RGB(W) pixel buffer library for like NeoPixel and DotStar.
+//| """A fast RGB(W) pixel buffer library for like NeoPixel and DotStar.
 //|
 //| The `_pixelbuf` module provides the :py:class:`PixelBuf` class to accelerate
 //| RGB(W) strip/matrix manipulation, such as DotStar and Neopixel.
 //|
-//| Byteorders are configured with strings, such as "RGB" or "RGBD".
-//| TODO: Pull in docs from pypixelbuf.
+//| Byteorders are configured with strings, such as "RGB" or "RGBD"."""
+// TODO: Pull in docs from pypixelbuf.
 
-//| Libraries
+//| def colorwheel(n: int) -> Any:
+//|     """C implementation of the common wheel() function found in many examples.
+//|     Returns the colorwheel RGB value as an integer value for n (usable in :py:class:`PixelBuf`, neopixel, and dotstar)."""
+//|     ...
 //|
-//| .. toctree::
-//|     :maxdepth: 3
-//|
-//|     PixelBuf
-
-
-//| .. function:: wheel(n)
-//|
-//|     C implementation of the common wheel() function found in many examples.
-//|     Returns the colorwheel RGB value as an integer value for n (usable in :py:class:`PixelBuf`, neopixel, and dotstar).
+//| def wheel(n: Any) -> Any:
+//|     """Use of wheel() is deprecated. Please use colorwheel()."""
 //|
 
-STATIC mp_obj_t pixelbuf_wheel(mp_obj_t n) {
+STATIC mp_obj_t pixelbuf_colorwheel(mp_obj_t n) {
     return MP_OBJ_NEW_SMALL_INT(colorwheel(MP_OBJ_IS_SMALL_INT(n) ? MP_OBJ_SMALL_INT_VALUE(n) : mp_obj_float_get(n)));
 }
-STATIC MP_DEFINE_CONST_FUN_OBJ_1(pixelbuf_wheel_obj, pixelbuf_wheel);
+STATIC MP_DEFINE_CONST_FUN_OBJ_1(pixelbuf_colorwheel_obj, pixelbuf_colorwheel);
 
 const int32_t colorwheel(float pos) {
     if (pos > 255) {
         pos = pos - ((uint32_t)(pos / 256) * 256);
     }
     if (pos < 85)
-        return (uint8_t)(pos * 3) << 16 | (uint8_t)(255 - (pos * 3)) << 8;
+        return (uint8_t)(255 - (pos * 3)) << 16 | (uint8_t)(pos * 3) << 8;
     else if (pos < 170) {
         pos -= 85;
-        return (uint8_t)(255 - (pos * 3)) << 16 | (uint8_t)(pos * 3);
+        return (uint8_t)(255 - (pos * 3)) << 8 | (uint8_t)(pos * 3);
     } else {
         pos -= 170;
-        return (uint8_t)(pos * 3) << 8 | (uint8_t)(255 - pos * 3);
+        return (uint8_t)(pos * 3) << 16 | (uint8_t)(255 - (pos * 3));
     }
 }
-
-
-//| .. function:: fill(pixelbuf, color)
-//|
-//|   Fills the given pixelbuf with the given color.
-//|
-
-STATIC mp_obj_t pixelbuf_fill(mp_obj_t pixelbuf_in, mp_obj_t value) {
-    mp_obj_t obj = mp_instance_cast_to_native_base(pixelbuf_in, &pixelbuf_pixelbuf_type);
-    if (obj == MP_OBJ_NULL)
-        mp_raise_TypeError(translate("Expected a PixelBuf instance"));
-    pixelbuf_pixelbuf_obj_t *pixelbuf = MP_OBJ_TO_PTR(obj);
-
-    for (size_t offset = 0; offset < pixelbuf->bytes; offset+= pixelbuf->pixel_step) {
-        pixelbuf_set_pixel(pixelbuf->buf + offset, pixelbuf->two_buffers ? (pixelbuf->rawbuf + offset) : NULL,
-                           pixelbuf->brightness, value, &pixelbuf->byteorder, pixelbuf->byteorder.is_dotstar);
-    }
-    if (pixelbuf->auto_write)
-        pixelbuf_call_show(pixelbuf_in);
-    return mp_const_none;
-}
-STATIC MP_DEFINE_CONST_FUN_OBJ_2(pixelbuf_fill_obj, pixelbuf_fill);
-
 
 STATIC const mp_rom_map_elem_t pixelbuf_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR__pixelbuf) },
     { MP_ROM_QSTR(MP_QSTR_PixelBuf), MP_ROM_PTR(&pixelbuf_pixelbuf_type) },
-    { MP_ROM_QSTR(MP_QSTR_wheel), MP_ROM_PTR(&pixelbuf_wheel_obj) },
-    { MP_ROM_QSTR(MP_QSTR_fill), MP_ROM_PTR(&pixelbuf_fill_obj) },
+    { MP_ROM_QSTR(MP_QSTR_wheel), MP_ROM_PTR(&pixelbuf_colorwheel_obj) },
+    { MP_ROM_QSTR(MP_QSTR_colorwheel), MP_ROM_PTR(&pixelbuf_colorwheel_obj) },
 };
 
 STATIC MP_DEFINE_CONST_DICT(pixelbuf_module_globals, pixelbuf_module_globals_table);
 
 const mp_obj_module_t pixelbuf_module = {
-        .base = { &mp_type_module },
-        .globals = (mp_obj_dict_t*)&pixelbuf_module_globals,
+    .base = { &mp_type_module },
+    .globals = (mp_obj_dict_t*)&pixelbuf_module_globals,
 };

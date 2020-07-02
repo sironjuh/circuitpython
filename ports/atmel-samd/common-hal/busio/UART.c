@@ -45,6 +45,9 @@
 
 #include "samd/sercom.h"
 
+#define UART_DEBUG(...) (void)0
+// #define UART_DEBUG(...) mp_printf(&mp_plat_print __VA_OPT__(,) __VA_ARGS__)
+
 // Do-nothing callback needed so that usart_async code will enable rx interrupts.
 // See comment below re usart_async_register_callback()
 static void usart_async_rxc_callback(const struct usart_async_descriptor *const descr) {
@@ -52,9 +55,13 @@ static void usart_async_rxc_callback(const struct usart_async_descriptor *const 
 }
 
 void common_hal_busio_uart_construct(busio_uart_obj_t *self,
-        const mcu_pin_obj_t * tx, const mcu_pin_obj_t * rx, uint32_t baudrate,
-        uint8_t bits, uart_parity_t parity, uint8_t stop, mp_float_t timeout,
-        uint16_t receiver_buffer_size) {
+    const mcu_pin_obj_t * tx, const mcu_pin_obj_t * rx,
+    const mcu_pin_obj_t * rts, const mcu_pin_obj_t * cts,
+    const mcu_pin_obj_t * rs485_dir, bool rs485_invert,
+    uint32_t baudrate, uint8_t bits, uart_parity_t parity, uint8_t stop,
+    mp_float_t timeout, uint16_t receiver_buffer_size, byte* receiver_buffer,
+    bool sigint_enabled) {
+
     Sercom* sercom = NULL;
     uint8_t sercom_index = 255; // Unset index
     uint32_t rx_pinmux = 0;
@@ -62,12 +69,16 @@ void common_hal_busio_uart_construct(busio_uart_obj_t *self,
     uint32_t tx_pinmux = 0;
     uint8_t tx_pad = 255; // Unset pad
 
+    if ((rts != NULL) || (cts != NULL) || (rs485_dir != NULL) || (rs485_invert)) {
+        mp_raise_ValueError(translate("RTS/CTS/RS485 Not yet supported on this device"));
+    }
+
     if (bits > 8) {
         mp_raise_NotImplementedError(translate("bytes > 8 bits not supported"));
     }
 
-    bool have_tx = tx != mp_const_none;
-    bool have_rx = rx != mp_const_none;
+    bool have_tx = tx != NULL;
+    bool have_rx = rx != NULL;
     if (!have_tx && !have_rx) {
         mp_raise_ValueError(translate("tx and rx cannot both be None"));
     }
@@ -102,7 +113,7 @@ void common_hal_busio_uart_construct(busio_uart_obj_t *self,
 #endif
             tx_pinmux = PINMUX(tx->number, (i == 0) ? MUX_C : MUX_D);
             tx_pad = tx->sercom[i].pad;
-            if (rx == mp_const_none) {
+            if (rx == NULL) {
                 sercom = potential_sercom;
                 break;
             }
@@ -150,7 +161,7 @@ void common_hal_busio_uart_construct(busio_uart_obj_t *self,
         self->buffer = (uint8_t *) gc_alloc(self->buffer_length * sizeof(uint8_t), false, true);
         if (self->buffer == NULL) {
             common_hal_busio_uart_deinit(self);
-            mp_raise_msg(&mp_type_MemoryError, translate("Failed to allocate RX buffer"));
+            mp_raise_msg_varg(&mp_type_MemoryError, translate("Failed to allocate RX buffer of %d bytes"), self->buffer_length * sizeof(uint8_t));
         }
     } else {
         self->buffer_length = 0;
