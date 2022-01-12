@@ -36,11 +36,21 @@
  ****************************************************************************/
 
 #include "clefia.h"
-#include "elf.h"
+#include "elf32.h"
 
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
+
+#define EI_MAG0            0      /* File identification */
+#define EI_MAG1            1
+#define EI_MAG2            2
+#define EI_MAG3            3
+
+#define SHT_SYMTAB         2
+#define SHT_STRTAB         3
+
+#define PT_LOAD            1
 
 #define alignup(x, a) (((x) + ((a) - 1)) & ~((a) - 1))
 #define swap(a, b) { (a) ^= (b); (b) ^= (a); (a) ^= (b); }
@@ -50,7 +60,7 @@
  ****************************************************************************/
 
 struct spk_header
-  {
+{
     uint8_t magic[4];
     uint8_t cpu;
     uint8_t reserved[11];
@@ -60,18 +70,18 @@ struct spk_header
     uint16_t binaries;
     uint16_t phoffs;
     uint16_t mode;
-  };
+};
 
 struct spk_prog_info
-  {
+{
     uint32_t load_address;
     uint32_t offset;
     uint32_t size;
     uint32_t memsize;
-  };
+};
 
 struct elf_file
-  {
+{
     Elf32_Ehdr *ehdr;
     Elf32_Phdr *phdr;
     Elf32_Shdr *shdr;
@@ -80,4 +90,4 @@ struct elf_file
     char *shstring;
     char *string;
     char *data;
-  };
+};

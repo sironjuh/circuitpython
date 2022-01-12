@@ -25,10 +25,22 @@
  */
 
 #include <stdbool.h>
+#include "py/obj.h"
+#include "py/enum.h"
+#include "py/runtime.h"
 #include "py/objproperty.h"
+
+#include "shared-bindings/supervisor/RunReason.h"
 #include "shared-bindings/supervisor/Runtime.h"
 
-//TODO: add USB, REPL to description once they're operational
+#if (CIRCUITPY_USB)
+#include "tusb.h"
+#endif
+
+STATIC supervisor_run_reason_t _run_reason;
+
+// TODO: add REPL to description once it is operational
+
 //| class Runtime:
 //|     """Current status of runtime objects.
 //|
@@ -39,66 +51,87 @@
 //|            print("Hello World!")"""
 //|
 
-//|     def __init__(self, ):
+//|     def __init__(self) -> None:
 //|         """You cannot create an instance of `supervisor.Runtime`.
 //|         Use `supervisor.runtime` to access the sole instance available."""
 //|         ...
 //|
 
-//|     serial_connected: bool = ...
-//|     """Returns the USB serial communication status (read-only).
+//|     usb_connected: bool
+//|     """Returns the USB enumeration status (read-only)."""
 //|
-//|     .. note::
-//|
-//|         SAMD: Will return ``True`` if the USB serial connection
-//|         has been established at any point.  Will not reset if
-//|         USB is disconnected but power remains (e.g. battery connected)"""
-//|
-
-STATIC mp_obj_t supervisor_get_serial_connected(mp_obj_t self){
-    if (!common_hal_get_serial_connected()) {
-        return mp_const_false;
-    }
-    else {
-        return mp_const_true;
-    }
+STATIC mp_obj_t supervisor_runtime_get_usb_connected(mp_obj_t self) {
+    #if CIRCUITPY_USB
+    return mp_obj_new_bool(tud_ready());
+    #else
+    return mp_const_false;
+    #endif
 }
-MP_DEFINE_CONST_FUN_OBJ_1(supervisor_get_serial_connected_obj, supervisor_get_serial_connected);
+MP_DEFINE_CONST_FUN_OBJ_1(supervisor_runtime_get_usb_connected_obj, supervisor_runtime_get_usb_connected);
 
-const mp_obj_property_t supervisor_serial_connected_obj = {
+const mp_obj_property_t supervisor_runtime_usb_connected_obj = {
     .base.type = &mp_type_property,
-    .proxy = {(mp_obj_t)&supervisor_get_serial_connected_obj,
-              (mp_obj_t)&mp_const_none_obj,
-              (mp_obj_t)&mp_const_none_obj},
+    .proxy = {(mp_obj_t)&supervisor_runtime_get_usb_connected_obj,
+              MP_ROM_NONE,
+              MP_ROM_NONE},
 };
 
+//|     serial_connected: bool
+//|     """Returns the USB serial communication status (read-only)."""
+//|
+STATIC mp_obj_t supervisor_runtime_get_serial_connected(mp_obj_t self) {
+    return mp_obj_new_bool(common_hal_supervisor_runtime_get_serial_connected());
+}
+MP_DEFINE_CONST_FUN_OBJ_1(supervisor_runtime_get_serial_connected_obj, supervisor_runtime_get_serial_connected);
 
-//|     serial_bytes_available: int = ...
+const mp_obj_property_t supervisor_runtime_serial_connected_obj = {
+    .base.type = &mp_type_property,
+    .proxy = {(mp_obj_t)&supervisor_runtime_get_serial_connected_obj,
+              MP_ROM_NONE,
+              MP_ROM_NONE},
+};
+
+//|     serial_bytes_available: int
 //|     """Returns the whether any bytes are available to read
 //|     on the USB serial input.  Allows for polling to see whether
 //|     to call the built-in input() or wait. (read-only)"""
 //|
-STATIC mp_obj_t supervisor_get_serial_bytes_available(mp_obj_t self){
-    if (!common_hal_get_serial_bytes_available()) {
-        return mp_const_false;
-    }
-    else {
-        return mp_const_true;
-    }
+STATIC mp_obj_t supervisor_runtime_get_serial_bytes_available(mp_obj_t self) {
+    return mp_obj_new_bool(common_hal_supervisor_runtime_get_serial_bytes_available());
 }
-MP_DEFINE_CONST_FUN_OBJ_1(supervisor_get_serial_bytes_available_obj, supervisor_get_serial_bytes_available);
+MP_DEFINE_CONST_FUN_OBJ_1(supervisor_runtime_get_serial_bytes_available_obj, supervisor_runtime_get_serial_bytes_available);
 
-const mp_obj_property_t supervisor_serial_bytes_available_obj = {
+const mp_obj_property_t supervisor_runtime_serial_bytes_available_obj = {
     .base.type = &mp_type_property,
-    .proxy = {(mp_obj_t)&supervisor_get_serial_bytes_available_obj,
-              (mp_obj_t)&mp_const_none_obj,
-              (mp_obj_t)&mp_const_none_obj},
+    .proxy = {(mp_obj_t)&supervisor_runtime_get_serial_bytes_available_obj,
+              MP_ROM_NONE,
+              MP_ROM_NONE},
 };
 
+//|     run_reason: RunReason
+//|     """Returns why CircuitPython started running this particular time."""
+//|
+STATIC mp_obj_t supervisor_runtime_get_run_reason(mp_obj_t self) {
+    return cp_enum_find(&supervisor_run_reason_type, _run_reason);
+}
+MP_DEFINE_CONST_FUN_OBJ_1(supervisor_runtime_get_run_reason_obj, supervisor_runtime_get_run_reason);
+
+const mp_obj_property_t supervisor_runtime_run_reason_obj = {
+    .base.type = &mp_type_property,
+    .proxy = {(mp_obj_t)&supervisor_runtime_get_run_reason_obj,
+              MP_ROM_NONE,
+              MP_ROM_NONE},
+};
+
+void supervisor_set_run_reason(supervisor_run_reason_t run_reason) {
+    _run_reason = run_reason;
+}
 
 STATIC const mp_rom_map_elem_t supervisor_runtime_locals_dict_table[] = {
-    { MP_ROM_QSTR(MP_QSTR_serial_connected), MP_ROM_PTR(&supervisor_serial_connected_obj) },
-    { MP_ROM_QSTR(MP_QSTR_serial_bytes_available), MP_ROM_PTR(&supervisor_serial_bytes_available_obj) },
+    { MP_ROM_QSTR(MP_QSTR_usb_connected), MP_ROM_PTR(&supervisor_runtime_usb_connected_obj) },
+    { MP_ROM_QSTR(MP_QSTR_serial_connected), MP_ROM_PTR(&supervisor_runtime_serial_connected_obj) },
+    { MP_ROM_QSTR(MP_QSTR_serial_bytes_available), MP_ROM_PTR(&supervisor_runtime_serial_bytes_available_obj) },
+    { MP_ROM_QSTR(MP_QSTR_run_reason), MP_ROM_PTR(&supervisor_runtime_run_reason_obj) },
 };
 
 STATIC MP_DEFINE_CONST_DICT(supervisor_runtime_locals_dict, supervisor_runtime_locals_dict_table);
@@ -106,5 +139,5 @@ STATIC MP_DEFINE_CONST_DICT(supervisor_runtime_locals_dict, supervisor_runtime_l
 const mp_obj_type_t supervisor_runtime_type = {
     .base = { &mp_type_type },
     .name = MP_QSTR_Runtime,
-    .locals_dict = (mp_obj_t)&supervisor_runtime_locals_dict,
+    .locals_dict = (mp_obj_dict_t *)&supervisor_runtime_locals_dict,
 };

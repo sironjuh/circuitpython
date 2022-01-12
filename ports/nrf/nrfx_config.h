@@ -5,7 +5,7 @@
 #define NRFX_POWER_ENABLED 1
 #define NRFX_POWER_DEFAULT_CONFIG_IRQ_PRIORITY 7
 
-// NOTE: THIS WORKAROUND CAUSES BLE CODE TO CRASH.
+// NOTE: THIS WORKAROUND CAUSES BLE CODE TO CRASH. DO NOT USE.
 // It doesn't work with the SoftDevice.
 // See https://devzone.nordicsemi.com/f/nordic-q-a/33982/sdk-15-software-crash-during-spi-session
 // Turn on nrfx supported workarounds for errata in Rev1 of nRF52840
@@ -32,7 +32,7 @@
 #endif
 
 #if CIRCUITPY_NRF_NUM_I2C != 0 && CIRCUITPY_NRF_NUM_I2C != 1 && CIRCUITPY_NRF_NUM_I2C != 2
-# error CIRCUITPY_NRF_NUM_I2C must be 0, 1, or 2
+#error CIRCUITPY_NRF_NUM_I2C must be 0, 1, or 2
 #endif
 
 // Enable SPIM1, SPIM2 and SPIM3 (if available)
@@ -76,6 +76,9 @@
 #define NRFX_UARTE_ENABLED 1
 #define NRFX_UARTE0_ENABLED 1
 #define NRFX_UARTE1_ENABLED 1
+// Higher priority than non-timing sensitive BLE so that we can log over UART
+// from it.
+#define NRFX_UARTE_DEFAULT_CONFIG_IRQ_PRIORITY 3
 
 // PWM
 #define NRFX_PWM0_ENABLED 1
@@ -116,7 +119,7 @@
 
 // GPIO interrupt
 #define NRFX_GPIOTE_ENABLED 1
-#define NRFX_GPIOTE_CONFIG_NUM_OF_LOW_POWER_EVENTS 1
+#define NRFX_GPIOTE_CONFIG_NUM_OF_LOW_POWER_EVENTS 2
 #define NRFX_GPIOTE_CONFIG_IRQ_PRIORITY 7
 
 // NVM controller

@@ -3,7 +3,7 @@
  *
  * The MIT License (MIT)
  *
- * Copyright (c) 2013, 2014 Damien P. George
+ * SPDX-FileCopyrightText: Copyright (c) 2013, 2014 Damien P. George
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -26,7 +26,7 @@
 
 #include <string.h>
 
-#include "lib/utils/context_manager_helpers.h"
+#include "shared/runtime/context_manager_helpers.h"
 #include "py/binary.h"
 #include "py/mphal.h"
 #include "py/nlr.h"
@@ -48,7 +48,7 @@
 //|        val = adc.value"""
 //|
 
-//|     def __init__(self, pin: microcontroller.Pin):
+//|     def __init__(self, pin: microcontroller.Pin) -> None:
 //|         """Use the AnalogIn on the given pin. The reference voltage varies by
 //|         platform so use ``reference_voltage`` to read the configured setting.
 //|
@@ -56,9 +56,9 @@
 //|         ...
 //|
 STATIC mp_obj_t analogio_analogin_make_new(const mp_obj_type_t *type,
-        mp_uint_t n_args, const mp_obj_t *args, mp_map_t *kw_args) {
+    mp_uint_t n_args, size_t n_kw, const mp_obj_t *args) {
     // check number of arguments
-    mp_arg_check_num(n_args, kw_args, 1, 1, false);
+    mp_arg_check_num(n_args, n_kw, 1, 1, false);
 
     // 1st argument is the pin
     const mcu_pin_obj_t *pin = validate_obj_is_free_pin(args[0]);
@@ -70,14 +70,14 @@ STATIC mp_obj_t analogio_analogin_make_new(const mp_obj_type_t *type,
     return MP_OBJ_FROM_PTR(self);
 }
 
-//|     def deinit(self, ) -> Any:
+//|     def deinit(self) -> None:
 //|         """Turn off the AnalogIn and release the pin for other use."""
 //|         ...
 //|
 STATIC mp_obj_t analogio_analogin_deinit(mp_obj_t self_in) {
-   analogio_analogin_obj_t *self = MP_OBJ_TO_PTR(self_in);
-   common_hal_analogio_analogin_deinit(self);
-   return mp_const_none;
+    analogio_analogin_obj_t *self = MP_OBJ_TO_PTR(self_in);
+    common_hal_analogio_analogin_deinit(self);
+    return mp_const_none;
 }
 MP_DEFINE_CONST_FUN_OBJ_1(analogio_analogin_deinit_obj, analogio_analogin_deinit);
 
@@ -86,13 +86,13 @@ STATIC void check_for_deinit(analogio_analogin_obj_t *self) {
         raise_deinited_error();
     }
 }
-//|     def __enter__(self, ) -> Any:
+//|     def __enter__(self) -> AnalogIn:
 //|         """No-op used by Context Managers."""
 //|         ...
 //|
 //  Provided by context manager helper.
 
-//|     def __exit__(self, ) -> Any:
+//|     def __exit__(self) -> None:
 //|         """Automatically deinitializes the hardware when exiting a context. See
 //|         :ref:`lifetime-and-contextmanagers` for more info."""
 //|         ...
@@ -104,7 +104,7 @@ STATIC mp_obj_t analogio_analogin___exit__(size_t n_args, const mp_obj_t *args) 
 }
 STATIC MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(analogio_analogin___exit___obj, 4, 4, analogio_analogin___exit__);
 
-//|     value: Any = ...
+//|     value: int
 //|     """The value on the analog pin between 0 and 65535 inclusive (16-bit). (read-only)
 //|
 //|     Even if the underlying analog to digital converter (ADC) is lower
@@ -120,11 +120,11 @@ MP_DEFINE_CONST_FUN_OBJ_1(analogio_analogin_get_value_obj, analogio_analogin_obj
 const mp_obj_property_t analogio_analogin_value_obj = {
     .base.type = &mp_type_property,
     .proxy = {(mp_obj_t)&analogio_analogin_get_value_obj,
-              (mp_obj_t)&mp_const_none_obj,
-              (mp_obj_t)&mp_const_none_obj},
+              MP_ROM_NONE,
+              MP_ROM_NONE},
 };
 
-//|     reference_voltage: Any = ...
+//|     reference_voltage: float
 //|     """The maximum voltage measurable (also known as the reference voltage) as a
 //|     `float` in Volts."""
 //|
@@ -140,13 +140,13 @@ STATIC mp_obj_t analogio_analogin_obj_get_reference_voltage(mp_obj_t self_in) {
     }
 }
 MP_DEFINE_CONST_FUN_OBJ_1(analogio_analogin_get_reference_voltage_obj,
-                          analogio_analogin_obj_get_reference_voltage);
+    analogio_analogin_obj_get_reference_voltage);
 
 const mp_obj_property_t analogio_analogin_reference_voltage_obj = {
     .base.type = &mp_type_property,
     .proxy = {(mp_obj_t)&analogio_analogin_get_reference_voltage_obj,
-              (mp_obj_t)&mp_const_none_obj,
-              (mp_obj_t)&mp_const_none_obj},
+              MP_ROM_NONE,
+              MP_ROM_NONE},
 };
 
 STATIC const mp_rom_map_elem_t analogio_analogin_locals_dict_table[] = {

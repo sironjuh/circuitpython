@@ -25,7 +25,7 @@
  * THE SOFTWARE.
  */
 
-#include "boards/board.h"
+#include "supervisor/board.h"
 #include "common-hal/microcontroller/Pin.h"
 
 void board_init(void) {
@@ -37,4 +37,7 @@ bool board_requests_safe_mode(void) {
 
 void reset_board(void) {
 
+}
+
+void board_deinit(void) {
 }

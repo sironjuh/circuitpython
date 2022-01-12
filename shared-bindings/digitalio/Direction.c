@@ -27,7 +27,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "lib/utils/context_manager_helpers.h"
+#include "shared/runtime/context_manager_helpers.h"
 
 #include "py/nlr.h"
 #include "py/objtype.h"
@@ -41,15 +41,15 @@
 //| class Direction:
 //|     """Defines the direction of a digital pin"""
 //|
-//|     def __init__(self, ):
+//|     def __init__(self) -> None:
 //|         """Enum-like class to define which direction the digital values are
 //|         going."""
 //|         ...
 //|
-//|     INPUT: Any = ...
+//|     INPUT: Direction
 //|     """Read digital data in"""
 //|
-//|     OUTPUT: Any = ...
+//|     OUTPUT: Direction
 //|     """Write digital data out"""
 //|
 const mp_obj_type_t digitalio_direction_type;
@@ -70,7 +70,7 @@ STATIC MP_DEFINE_CONST_DICT(digitalio_direction_locals_dict, digitalio_direction
 
 STATIC void digitalio_direction_print(const mp_print_t *print, mp_obj_t self_in, mp_print_kind_t kind) {
     qstr direction = MP_QSTR_INPUT;
-    if (MP_OBJ_TO_PTR(self_in) == MP_ROM_PTR(&digitalio_direction_output_obj)) {
+    if (self_in == MP_ROM_PTR(&digitalio_direction_output_obj)) {
         direction = MP_QSTR_OUTPUT;
     }
     mp_printf(print, "%q.%q.%q", MP_QSTR_digitalio, MP_QSTR_Direction, direction);
@@ -80,5 +80,5 @@ const mp_obj_type_t digitalio_direction_type = {
     { &mp_type_type },
     .name = MP_QSTR_Direction,
     .print = digitalio_direction_print,
-    .locals_dict = (mp_obj_t)&digitalio_direction_locals_dict,
+    .locals_dict = (mp_obj_dict_t *)&digitalio_direction_locals_dict,
 };

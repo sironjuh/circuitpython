@@ -42,25 +42,32 @@
 #include "samd/timers.h"
 #include "shared-bindings/microcontroller/__init__.h"
 #include "shared-bindings/pulseio/PulseIn.h"
+#include "supervisor/shared/tick.h"
 #include "supervisor/shared/translate.h"
+#include "supervisor/port.h"
 
 // This timer is shared amongst all PulseIn objects as a higher resolution clock.
 static uint8_t refcount = 0;
 static uint8_t pulsein_tc_index = 0xff;
 
 volatile static uint32_t overflow_count = 0;
+volatile static uint32_t start_overflow = 0;
 
 void pulsein_timer_interrupt_handler(uint8_t index) {
-    if (index != pulsein_tc_index) return;
+    if (index != pulsein_tc_index) {
+        return;
+    }
     overflow_count++;
-    Tc* tc = tc_insts[index];
-    if (!tc->COUNT16.INTFLAG.bit.OVF) return;
+    Tc *tc = tc_insts[index];
+    if (!tc->COUNT16.INTFLAG.bit.OVF) {
+        return;
+    }
 
     // Clear the interrupt bit.
     tc->COUNT16.INTFLAG.reg = TC_INTFLAG_OVF;
 }
 
-static void pulsein_set_config(pulseio_pulsein_obj_t* self, bool first_edge) {
+static void pulsein_set_config(pulseio_pulsein_obj_t *self, bool first_edge) {
     uint32_t sense_setting;
     if (!first_edge) {
         sense_setting = EIC_CONFIG_SENSE0_BOTH_Val;
@@ -76,21 +83,22 @@ static void pulsein_set_config(pulseio_pulsein_obj_t* self, bool first_edge) {
 }
 
 void pulsein_interrupt_handler(uint8_t channel) {
+    // Turn off interrupts while in handler
+    common_hal_mcu_disable_interrupts();
     // Grab the current time first.
     uint32_t current_overflow = overflow_count;
-    Tc* tc = tc_insts[pulsein_tc_index];
-    #ifdef SAMD51
+    Tc *tc = tc_insts[pulsein_tc_index];
+    #ifdef SAM_D5X_E5X
     tc->COUNT16.CTRLBSET.reg = TC_CTRLBSET_CMD_READSYNC;
     while (tc->COUNT16.SYNCBUSY.bit.COUNT == 1 ||
-           tc->COUNT16.CTRLBSET.bit.CMD == TC_CTRLBSET_CMD_READSYNC_Val) {}
+           tc->COUNT16.CTRLBSET.bit.CMD == TC_CTRLBSET_CMD_READSYNC_Val) {
+    }
     #endif
     uint32_t current_count = tc->COUNT16.COUNT.reg;
 
-    pulseio_pulsein_obj_t* self = get_eic_channel_data(channel);
-    if (!background_tasks_ok() || self->errored_too_fast) {
-        self->errored_too_fast = true;
-        common_hal_pulseio_pulsein_pause(self);
-        return;
+    pulseio_pulsein_obj_t *self = get_eic_channel_data(channel);
+    if (self->len == 0) {
+        start_overflow = overflow_count;
     }
     if (self->first_edge) {
         self->first_edge = false;
@@ -111,6 +119,13 @@ void pulsein_interrupt_handler(uint8_t channel) {
         if (total_diff < duration) {
             duration = total_diff;
         }
+        // check if the input is taking too long, 15 timer overflows is approx 1 second
+        if (current_overflow - start_overflow > 15) {
+            self->errored_too_fast = true;
+            common_hal_pulseio_pulsein_pause(self);
+            common_hal_mcu_enable_interrupts();
+            return;
+        }
 
         uint16_t i = (self->start + self->len) % self->maxlen;
         self->buffer[i] = duration;
@@ -122,16 +137,20 @@ void pulsein_interrupt_handler(uint8_t channel) {
     }
     self->last_overflow = current_overflow;
     self->last_count = current_count;
+    common_hal_mcu_enable_interrupts();
 }
 
 void pulsein_reset() {
+    #ifdef SAMD21
+    rtc_end_pulse();
+    #endif
     refcount = 0;
     pulsein_tc_index = 0xff;
     overflow_count = 0;
 }
 
-void common_hal_pulseio_pulsein_construct(pulseio_pulsein_obj_t* self,
-        const mcu_pin_obj_t* pin, uint16_t maxlen, bool idle_state) {
+void common_hal_pulseio_pulsein_construct(pulseio_pulsein_obj_t *self,
+    const mcu_pin_obj_t *pin, uint16_t maxlen, bool idle_state) {
     if (!pin->has_extint) {
         mp_raise_RuntimeError(translate("No hardware support on pin"));
     }
@@ -139,7 +158,7 @@ void common_hal_pulseio_pulsein_construct(pulseio_pulsein_obj_t* self,
         mp_raise_RuntimeError(translate("EXTINT channel already in use"));
     }
 
-    self->buffer = (uint16_t *) m_malloc(maxlen * sizeof(uint16_t), false);
+    self->buffer = (uint16_t *)m_malloc(maxlen * sizeof(uint16_t), false);
     if (self->buffer == NULL) {
         mp_raise_msg_varg(&mp_type_MemoryError, translate("Failed to allocate RX buffer of %d bytes"), maxlen * sizeof(uint16_t));
     }
@@ -173,7 +192,7 @@ void common_hal_pulseio_pulsein_construct(pulseio_pulsein_obj_t* self,
         // We use GCLK0 for SAMD21 which is 48MHz. We prescale it to 3MHz.
         turn_on_clocks(true, index, 0);
         #endif
-        #ifdef SAMD51
+        #ifdef SAM_D5X_E5X
         // We use GCLK5 for SAMD51 because it runs at 2MHz and we can use it for a 1MHz clock,
         // 1us per tick.
         turn_on_clocks(true, index, 5);
@@ -182,10 +201,10 @@ void common_hal_pulseio_pulsein_construct(pulseio_pulsein_obj_t* self,
 
         #ifdef SAMD21
         tc->COUNT16.CTRLA.reg = TC_CTRLA_MODE_COUNT16 |
-                                TC_CTRLA_PRESCALER_DIV16 |
-                                TC_CTRLA_WAVEGEN_NFRQ;
+            TC_CTRLA_PRESCALER_DIV16 |
+            TC_CTRLA_WAVEGEN_NFRQ;
         #endif
-        #ifdef SAMD51
+        #ifdef SAM_D5X_E5X
         tc_reset(tc);
         tc_set_enable(tc, false);
         tc->COUNT16.CTRLA.reg = TC_CTRLA_MODE_COUNT16 | TC_CTRLA_PRESCALER_DIV2;
@@ -206,7 +225,7 @@ void common_hal_pulseio_pulsein_construct(pulseio_pulsein_obj_t* self,
     self->last_overflow = overflow_count;
     self->last_count = 0;
 
-    set_eic_channel_data(pin->extint_channel, (void*) self);
+    set_eic_channel_data(pin->extint_channel, (void *)self);
 
     // Check to see if the EIC is enabled and start it up if its not.'
     if (eic_get_enable() == 0) {
@@ -221,16 +240,23 @@ void common_hal_pulseio_pulsein_construct(pulseio_pulsein_obj_t* self,
 
     // Set config will enable the EIC.
     pulsein_set_config(self, true);
+    #ifdef SAMD21
+    rtc_start_pulse();
+    #endif
+
 }
 
-bool common_hal_pulseio_pulsein_deinited(pulseio_pulsein_obj_t* self) {
+bool common_hal_pulseio_pulsein_deinited(pulseio_pulsein_obj_t *self) {
     return self->pin == NO_PIN;
 }
 
-void common_hal_pulseio_pulsein_deinit(pulseio_pulsein_obj_t* self) {
+void common_hal_pulseio_pulsein_deinit(pulseio_pulsein_obj_t *self) {
     if (common_hal_pulseio_pulsein_deinited(self)) {
         return;
     }
+    #ifdef SAMD21
+    rtc_end_pulse();
+    #endif
     set_eic_handler(self->channel, EIC_HANDLER_NO_INTERRUPT);
     turn_off_eic_channel(self->channel);
     reset_pin_number(self->pin);
@@ -243,18 +269,18 @@ void common_hal_pulseio_pulsein_deinit(pulseio_pulsein_obj_t* self) {
     self->pin = NO_PIN;
 }
 
-void common_hal_pulseio_pulsein_pause(pulseio_pulsein_obj_t* self) {
+void common_hal_pulseio_pulsein_pause(pulseio_pulsein_obj_t *self) {
     uint32_t mask = 1 << self->channel;
     EIC->INTENCLR.reg = mask << EIC_INTENSET_EXTINT_Pos;
+    #ifdef SAMD21
+    rtc_end_pulse();
+    #endif
 }
 
-void common_hal_pulseio_pulsein_resume(pulseio_pulsein_obj_t* self,
-        uint16_t trigger_duration) {
+void common_hal_pulseio_pulsein_resume(pulseio_pulsein_obj_t *self,
+    uint16_t trigger_duration) {
     // Make sure we're paused.
     common_hal_pulseio_pulsein_pause(self);
-
-    // Reset erroring
-    self->errored_too_fast = false;
 
     // Send the trigger pulse.
     if (trigger_duration > 0) {
@@ -269,57 +295,64 @@ void common_hal_pulseio_pulsein_resume(pulseio_pulsein_obj_t* self,
     self->first_edge = true;
     self->last_overflow = 0;
     self->last_count = 0;
+    self->errored_too_fast = false;
     gpio_set_pin_function(self->pin, GPIO_PIN_FUNCTION_A);
     uint32_t mask = 1 << self->channel;
     // Clear previous interrupt state and re-enable it.
     EIC->INTFLAG.reg = mask << EIC_INTFLAG_EXTINT_Pos;
     EIC->INTENSET.reg = mask << EIC_INTENSET_EXTINT_Pos;
 
+    #ifdef SAMD21
+    rtc_start_pulse();
+    #endif
     pulsein_set_config(self, true);
 }
 
-void common_hal_pulseio_pulsein_clear(pulseio_pulsein_obj_t* self) {
+void common_hal_pulseio_pulsein_clear(pulseio_pulsein_obj_t *self) {
     common_hal_mcu_disable_interrupts();
     self->start = 0;
     self->len = 0;
     common_hal_mcu_enable_interrupts();
 }
 
-uint16_t common_hal_pulseio_pulsein_popleft(pulseio_pulsein_obj_t* self) {
+uint16_t common_hal_pulseio_pulsein_popleft(pulseio_pulsein_obj_t *self) {
     if (self->len == 0) {
-        mp_raise_IndexError(translate("pop from an empty PulseIn"));
+        mp_raise_IndexError_varg(translate("pop from empty %q"), MP_QSTR_PulseIn);
+    }
+    if (self->errored_too_fast) {
+        self->errored_too_fast = 0;
+        mp_raise_RuntimeError(translate("Input taking too long"));
     }
     common_hal_mcu_disable_interrupts();
     uint16_t value = self->buffer[self->start];
     self->start = (self->start + 1) % self->maxlen;
     self->len--;
     common_hal_mcu_enable_interrupts();
-
     return value;
 }
 
-uint16_t common_hal_pulseio_pulsein_get_maxlen(pulseio_pulsein_obj_t* self) {
+uint16_t common_hal_pulseio_pulsein_get_maxlen(pulseio_pulsein_obj_t *self) {
     return self->maxlen;
 }
 
-uint16_t common_hal_pulseio_pulsein_get_len(pulseio_pulsein_obj_t* self) {
+uint16_t common_hal_pulseio_pulsein_get_len(pulseio_pulsein_obj_t *self) {
     return self->len;
 }
 
-bool common_hal_pulseio_pulsein_get_paused(pulseio_pulsein_obj_t* self) {
+bool common_hal_pulseio_pulsein_get_paused(pulseio_pulsein_obj_t *self) {
     uint32_t mask = 1 << self->channel;
     return (EIC->INTENSET.reg & (mask << EIC_INTENSET_EXTINT_Pos)) == 0;
 }
 
-uint16_t common_hal_pulseio_pulsein_get_item(pulseio_pulsein_obj_t* self,
-        int16_t index) {
+uint16_t common_hal_pulseio_pulsein_get_item(pulseio_pulsein_obj_t *self,
+    int16_t index) {
     common_hal_mcu_disable_interrupts();
     if (index < 0) {
         index += self->len;
     }
     if (index < 0 || index >= self->len) {
         common_hal_mcu_enable_interrupts();
-        mp_raise_IndexError(translate("index out of range"));
+        mp_raise_IndexError_varg(translate("%q index out of range"), MP_QSTR_PulseIn);
     }
     uint16_t value = self->buffer[(self->start + index) % self->maxlen];
     common_hal_mcu_enable_interrupts();

@@ -2,8 +2,8 @@
 #
 # The MIT License (MIT)
 #
-# Copyright (c) 2019 Dan Halbert for Adafruit Industries
-# Copyright (c) 2019 Lucian Copeland for Adafruit Industries
+# SPDX-FileCopyrightText: Copyright (c) 2019 Dan Halbert for Adafruit Industries
+# SPDX-FileCopyrightText: Copyright (c) 2019 Lucian Copeland for Adafruit Industries
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -81,15 +81,22 @@ INC += -I../../supervisor/shared/usb
 
 #Debugging/Optimization
 ifeq ($(DEBUG), 1)
-	CFLAGS += -ggdb
+	CFLAGS += -ggdb3
 	# You may want to enable these flags to make setting breakpoints easier.
 	CFLAGS += -fno-inline -fno-ipa-sra
 else
-	CFLAGS += -Os -DNDEBUG
-	CFLAGS += -ggdb
+	CFLAGS += -DNDEBUG
+	OPTIMIZATION_FLAGS ?= -O2 -fno-inline-functions
+	CFLAGS += -ggdb3
 	# TODO: Test with -flto
 	# CFLAGS += -flto
 endif
+
+# to override compiler optimization level, set in boards/$(BOARD)/mpconfigboard.mk
+CFLAGS += $(OPTIMIZATION_FLAGS)
+
+# Add -ftree-vrp optimization and checking to all builds. It's not enabled for -Os by default.
+CFLAGS += -ftree-vrp
 
 # MCU Series is defined by the HAL package and doesn't need to be specified here
 C_DEFS = -D$(MCU_PACKAGE) -DUSE_HAL_DRIVER -DUSE_FULL_LL_DRIVER -D$(MCU_VARIANT)
@@ -98,18 +105,20 @@ CFLAGS += $(INC) -Werror -Wall -std=gnu11 -fshort-enums $(BASE_CFLAGS) $(C_DEFS)
 
 # Undo some warnings.
 # STM32 HAL uses undefined preprocessor variables, shadowed variables, casts that change alignment reqs
-CFLAGS += -Wno-undef -Wno-shadow -Wno-cast-align
+# You can add your own temporary suppression by setting ADD_CFLAGS in the make command
+CFLAGS += -Wno-undef -Wno-shadow -Wno-cast-align $(ADD_CFLAGS)
 
 CFLAGS += -mthumb -mabi=aapcs-linux
 
 # Arm core selection
+MCU_FLAGS_L4 = -mcpu=cortex-m4
 MCU_FLAGS_F4 = -mcpu=cortex-m4
 MCU_FLAGS_F7 = -mcpu=cortex-m7
 MCU_FLAGS_H7 = -mcpu=cortex-m7
 CFLAGS += $(MCU_FLAGS_$(MCU_SERIES))
 
 # Select HAL file for distribution via mpconfigport
-CFLAGS += -DSTM32_HAL_H='<stm32$(MCU_SERIES_LOWER)xx_hal.h>'
+CFLAGS += -DSTM32_HAL_H="<stm32$(MCU_SERIES_LOWER)xx_hal.h>"
 
 CFLAGS += -DSTM32_SERIES_LOWER='"stm32$(MCU_SERIES_LOWER)"'
 
@@ -153,49 +162,60 @@ CFLAGS += \
 	-DCFG_TUD_MIDI_RX_BUFSIZE=128 \
 	-DCFG_TUD_MIDI_TX_BUFSIZE=128
 
+ifdef CIRCUITPY_USB_VENDOR
+CFLAGS += \
+	-DCFG_TUD_VENDOR_RX_BUFSIZE=1024 \
+	-DCFG_TUD_VENDOR_TX_BUFSIZE=1024
+endif
+
+
 SRC_STM32 = $(addprefix $(HAL_DIR)/Src/stm32$(MCU_SERIES_LOWER)xx_,\
+	hal.c \
 	hal_adc.c \
 	hal_adc_ex.c \
+	hal_cortex.c \
 	hal_dac.c \
 	hal_dac_ex.c \
+	hal_dma.c \
+	hal_dma_ex.c \
+	hal_exti.c \
+	hal_flash.c \
+	hal_flash_ex.c \
+	hal_gpio.c \
 	hal_i2c.c \
 	hal_i2c_ex.c \
+	hal_pwr.c \
+	hal_pwr_ex.c \
 	hal_qspi.c \
+	hal_rcc.c \
+	hal_rcc_ex.c \
 	hal_rng.c \
 	hal_rtc.c \
 	hal_rtc_ex.c \
+	hal_sd.c \
 	hal_spi.c \
 	hal_tim.c \
 	hal_tim_ex.c \
 	hal_uart.c \
 	hal_usart.c \
-	hal_rcc.c \
-	hal_rcc_ex.c \
-	hal_flash.c \
-	hal_flash_ex.c \
-	hal_gpio.c \
-	hal_dma_ex.c \
-	hal_dma.c \
-	hal_pwr.c \
-	hal_pwr_ex.c \
-	hal_cortex.c \
-	hal.c \
-	hal_exti.c \
-	hal_sd.c \
-	ll_gpio.c \
 	ll_adc.c \
-	ll_i2c.c \
 	ll_dma.c \
+	ll_exti.c \
+	ll_gpio.c \
+	ll_i2c.c \
+	ll_rcc.c \
 	ll_sdmmc.c \
 	ll_usart.c \
-	ll_rcc.c \
 	ll_utils.c \
-	ll_exti.c \
 )
+
+ifeq ($(CIRCUITPY_CANIO),1)
+SRC_STM32 += $(HAL_DIR)/Src/stm32$(MCU_SERIES_LOWER)xx_hal_can.c
+endif
 
 # Need this to avoid UART linker problems. TODO: rewrite to use registered callbacks.
 # Does not exist for F4 and lower
-ifeq ($(MCU_VARIANT),$(filter $(MCU_VARIANT),STM32F765xx STM32F767xx STM32F769xx STM32H743xx))
+ifeq ($(MCU_VARIANT),$(filter $(MCU_VARIANT),STM32F765xx STM32F767xx STM32F769xx STM32H743xx STM32L4R5xx))
 	SRC_STM32 += $(HAL_DIR)/Src/stm32$(MCU_SERIES_LOWER)xx_hal_uart_ex.c
 endif
 
@@ -207,25 +227,16 @@ SRC_C += \
 	mphalport.c \
 	boards/$(BOARD)/board.c \
 	boards/$(BOARD)/pins.c \
+	peripherals/timers.c \
+	peripherals/exti.c \
+	peripherals/rtc.c \
 	peripherals/stm32$(MCU_SERIES_LOWER)/clocks.c \
 	peripherals/stm32$(MCU_SERIES_LOWER)/$(MCU_VARIANT_LOWER)/pins.c \
 	peripherals/stm32$(MCU_SERIES_LOWER)/$(MCU_VARIANT_LOWER)/gpio.c \
 	peripherals/stm32$(MCU_SERIES_LOWER)/$(MCU_VARIANT_LOWER)/periph.c \
-	packages/$(MCU_PACKAGE).c \
-	lib/libc/string0.c \
-	lib/mp-readline/readline.c \
-	lib/oofatfs/ff.c \
-	lib/oofatfs/option/ccsbcs.c \
-	lib/timeutils/timeutils.c \
-	lib/utils/buffer_helper.c \
-	lib/utils/context_manager_helpers.c \
-	lib/utils/interrupt_char.c \
-	lib/utils/pyexec.c \
-	lib/utils/stdout_helpers.c \
-	lib/utils/sys_stdio_mphal.c \
-	supervisor/shared/memory.c
+	packages/$(MCU_PACKAGE).c
 
-ifneq ($(USB),FALSE)
+ifneq ($(CIRCUITPY_USB),0)
 SRC_C += lib/tinyusb/src/portable/st/synopsys/dcd_synopsys.c
 endif
 
@@ -254,6 +265,7 @@ OBJ += $(addprefix $(BUILD)/, $(SRC_SHARED_MODULE_EXPANDED:.c=.o))
 ifeq ($(INTERNAL_LIBM),1)
 OBJ += $(addprefix $(BUILD)/, $(SRC_LIBM:.c=.o))
 endif
+OBJ += $(addprefix $(BUILD)/, $(SRC_CIRCUITPY_COMMON:.c=.o))
 OBJ += $(addprefix $(BUILD)/, $(SRC_S:.s=.o))
 OBJ += $(addprefix $(BUILD)/, $(SRC_MOD:.c=.o))
 
@@ -276,8 +288,9 @@ all: $(BUILD)/firmware.bin $(BUILD)/firmware.uf2
 
 $(BUILD)/firmware.elf: $(OBJ)
 	$(STEPECHO) "LINK $@"
-	$(Q)$(CC) -o $@ $(LDFLAGS) $^ -Wl,--start-group $(LIBS) -Wl,--end-group
-	$(Q)$(SIZE) $@ | $(PYTHON3) $(TOP)/tools/build_memory_info.py $(LD_FILE)
+	$(Q)echo $^ > $(BUILD)/firmware.objs
+	$(Q)$(CC) -o $@ $(LDFLAGS) @$(BUILD)/firmware.objs -Wl,--start-group $(LIBS) -Wl,--end-group
+	$(Q)$(SIZE) $@ | $(PYTHON) $(TOP)/tools/build_memory_info.py $(LD_FILE)
 
 $(BUILD)/firmware.bin: $(BUILD)/firmware.elf
 	$(STEPECHO) "Create $@"
@@ -289,7 +302,7 @@ $(BUILD)/firmware.hex: $(BUILD)/firmware.elf
 
 $(BUILD)/firmware.uf2: $(BUILD)/firmware.hex
 	$(ECHO) "Create $@"
-	$(PYTHON3) $(TOP)/tools/uf2/utils/uf2conv.py -f 0x57755a57 -b $(BOOTLOADER_OFFSET) -c -o "$(BUILD)/firmware.uf2" $^
+	$(PYTHON) $(TOP)/tools/uf2/utils/uf2conv.py -f 0x57755a57 -b $(BOOTLOADER_OFFSET) -c -o "$(BUILD)/firmware.uf2" $^
 
 flash: $(BUILD)/firmware.bin
 	$(ECHO) "Writing $< to the board"

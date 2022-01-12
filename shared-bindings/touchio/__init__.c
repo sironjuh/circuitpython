@@ -66,5 +66,7 @@ STATIC MP_DEFINE_CONST_DICT(touchio_module_globals, touchio_module_globals_table
 
 const mp_obj_module_t touchio_module = {
     .base = { &mp_type_module },
-    .globals = (mp_obj_dict_t*)&touchio_module_globals,
+    .globals = (mp_obj_dict_t *)&touchio_module_globals,
 };
+
+MP_REGISTER_MODULE(MP_QSTR_touchio, touchio_module, CIRCUITPY_TOUCHIO);

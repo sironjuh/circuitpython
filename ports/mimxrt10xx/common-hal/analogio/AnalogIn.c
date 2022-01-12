@@ -26,6 +26,7 @@
  */
 
 #include "common-hal/analogio/AnalogIn.h"
+#include "shared-bindings/analogio/AnalogIn.h"
 #include "shared-bindings/microcontroller/Pin.h"
 
 #include <string.h>
@@ -36,8 +37,8 @@
 
 #define ADC_CHANNEL_GROUP 0
 
-void common_hal_analogio_analogin_construct(analogio_analogin_obj_t* self,
-        const mcu_pin_obj_t *pin) {
+void common_hal_analogio_analogin_construct(analogio_analogin_obj_t *self,
+    const mcu_pin_obj_t *pin) {
     adc_config_t config = {0};
 
     if (pin->adc == NULL) {

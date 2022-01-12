@@ -1,33 +1,12 @@
 #!/usr/bin/env python3
+
+# SPDX-FileCopyrightText: Copyright (c) 2014-2016 Damien P. George
+# SPDX-FileCopyrightText: Copyright (c) 2017 Paul Sokolovsky
+# SPDX-FileCopyrightText: Copyright (c) 2017 Scott Shawcroft for Adafruit Industries
+# SPDX-FileCopyrightText: Copyright (c) 2018 Noralf Trønnes
+# SPDX-FileCopyrightText: 2014 MicroPython & CircuitPython contributors (https://github.com/adafruit/circuitpython/graphs/contributors)
 #
-# This file is part of the MicroPython project, http://micropython.org/
-#
-# The MIT License (MIT)
-#
-# Copyright (c) 2017 Scott Shawcroft for Adafruit Industries
-# Copyright (c) 2018 Noralf Trønnes
-#
-# Parts taken from pyboard.py:
-# Copyright (c) 2014-2016 Damien P. George
-# Copyright (c) 2017 Paul Sokolovsky
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
+# SPDX-License-Identifier: MIT
 
 import os
 import re
@@ -121,9 +100,7 @@ class REPL:
         # Use read() since serial.reset_input_buffer() fails with termios.error now and then
         self.read()
         self.session = b""
-        self.write(
-            b"\r" + REPL.CHAR_CTRL_C + REPL.CHAR_CTRL_C
-        )  # interrupt any running program
+        self.write(b"\r" + REPL.CHAR_CTRL_C + REPL.CHAR_CTRL_C)  # interrupt any running program
         self.write(b"\r" + REPL.CHAR_CTRL_B)  # enter or reset friendly repl
         data = self.read_until(b">>> ")
 
@@ -179,11 +156,7 @@ class Disk:
         self.mountpoint = None
         with open("/etc/mtab", "r") as f:
             mtab = f.read()
-        mount = [
-            mount.split(" ")
-            for mount in mtab.splitlines()
-            if mount.startswith(self.dev)
-        ]
+        mount = [mount.split(" ") for mount in mtab.splitlines() if mount.startswith(self.dev)]
         if mount:
             self._path = mount[0][1]
         else:
@@ -289,9 +262,7 @@ class CPboard:
 
         vendor, _, product = name.partition(":")
         if vendor and product:
-            return CPboard.from_usb(
-                **kwargs, idVendor=int(vendor, 16), idProduct=int(product, 16)
-            )
+            return CPboard.from_usb(**kwargs, idVendor=int(vendor, 16), idProduct=int(product, 16))
 
         return CPboard(name, **kwargs)
 
@@ -384,11 +355,7 @@ class CPboard:
         except:
             pass
         else:
-            serials = [
-                serial
-                for serial in os.listdir("/dev/serial/by-path")
-                if portstr in serial
-            ]
+            serials = [serial for serial in os.listdir("/dev/serial/by-path") if portstr in serial]
             if len(serials) != 1:
                 raise RuntimeError("Can't find excatly one matching usb serial device")
             self.device = os.path.realpath("/dev/serial/by-path/" + serials[0])
@@ -482,9 +449,7 @@ class CPboard:
             % mode
         )
         try:
-            self.exec(
-                "import microcontroller;microcontroller.reset()", wait_for_response=False
-            )
+            self.exec("import microcontroller;microcontroller.reset()", wait_for_response=False)
         except OSError:
             pass
 
@@ -533,9 +498,7 @@ class CPboard:
         if not serial:
             raise RuntimeError("Serial number not found for: " + self.device)
         return [
-            "/dev/disk/by-id/" + disk
-            for disk in os.listdir("/dev/disk/by-id")
-            if serial in disk
+            "/dev/disk/by-id/" + disk for disk in os.listdir("/dev/disk/by-id") if serial in disk
         ]
 
     @property
@@ -583,9 +546,7 @@ PyboardError = CPboardError
 
 
 class Pyboard:
-    def __init__(
-        self, device, baudrate=115200, user="micro", password="python", wait=0
-    ):
+    def __init__(self, device, baudrate=115200, user="micro", password="python", wait=0):
         self.board = CPboard.from_try_all(device, baudrate=baudrate, wait=wait)
         with self.board.disk as disk:
             disk.copy("skip_if.py")
@@ -637,9 +598,7 @@ def upload(args):
 
     if not board.bootloader:
         print_verbose(args, "Reset to bootloader...", end="")
-        board.reset_to_bootloader(
-            repl=True
-        )  # Feather M0 Express doesn't respond to 1200 baud
+        board.reset_to_bootloader(repl=True)  # Feather M0 Express doesn't respond to 1200 baud
         time.sleep(5)
         print_verbose(args, "done")
 
@@ -671,14 +630,12 @@ def print_error_exit(args, e):
 def main():
     import argparse
 
-    cmd_parser = argparse.ArgumentParser(description="Circuit Python Board Tool")
+    cmd_parser = argparse.ArgumentParser(description="CircuitPython Board Tool")
     cmd_parser.add_argument("board", help="build_name, vid:pid or /dev/tty")
     cmd_parser.add_argument("-f", "--firmware", help="upload UF2 firmware file")
     cmd_parser.add_argument("-c", "--command", help="program passed in as string")
     cmd_parser.add_argument("--tty", action="store_true", help="print tty")
-    cmd_parser.add_argument(
-        "--verbose", "-v", action="count", default=0, help="be verbose"
-    )
+    cmd_parser.add_argument("--verbose", "-v", action="count", default=0, help="be verbose")
     cmd_parser.add_argument("-q", "--quiet", action="store_true", help="be quiet")
     cmd_parser.add_argument("--debug", action="store_true", help="raise exceptions")
     args = cmd_parser.parse_args()
@@ -723,9 +680,7 @@ def main():
         with board as b:
             print("Device: ", end="")
             if b.usb_dev:
-                print(
-                    "%04x:%04x on " % (b.usb_dev.idVendor, b.usb_dev.idProduct), end=""
-                )
+                print("%04x:%04x on " % (b.usb_dev.idVendor, b.usb_dev.idProduct), end="")
             print(b.device)
             print("Serial number:", b.serial_number)
             uname = os_uname(b)

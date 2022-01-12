@@ -30,7 +30,9 @@
 #include "py/runtime.h"
 #include "shared-bindings/displayio/FourWire.h"
 #include "shared-bindings/displayio/I2CDisplay.h"
-#include "shared-bindings/displayio/ParallelBus.h"
+#if CIRCUITPY_PARALLELDISPLAY
+#include "shared-bindings/paralleldisplay/ParallelBus.h"
+#endif
 #include "shared-bindings/microcontroller/Pin.h"
 #include "shared-bindings/time/__init__.h"
 #include "shared-module/displayio/__init__.h"
@@ -43,11 +45,12 @@
 #define DISPLAYIO_CORE_DEBUG(...) (void)0
 // #define DISPLAYIO_CORE_DEBUG(...) mp_printf(&mp_plat_print __VA_OPT__(,) __VA_ARGS__)
 
-void displayio_display_core_construct(displayio_display_core_t* self,
-        mp_obj_t bus, uint16_t width, uint16_t height, uint16_t ram_width, uint16_t ram_height, int16_t colstart, int16_t rowstart, uint16_t rotation,
-        uint16_t color_depth, bool grayscale, bool pixels_in_byte_share_row, uint8_t bytes_per_cell, bool reverse_pixels_in_byte, bool reverse_bytes_in_word) {
+void displayio_display_core_construct(displayio_display_core_t *self,
+    mp_obj_t bus, uint16_t width, uint16_t height, uint16_t ram_width, uint16_t ram_height, int16_t colstart, int16_t rowstart, uint16_t rotation,
+    uint16_t color_depth, bool grayscale, bool pixels_in_byte_share_row, uint8_t bytes_per_cell, bool reverse_pixels_in_byte, bool reverse_bytes_in_word) {
     self->colorspace.depth = color_depth;
     self->colorspace.grayscale = grayscale;
+    self->colorspace.grayscale_bit = 8 - color_depth;
     self->colorspace.pixels_in_byte_share_row = pixels_in_byte_share_row;
     self->colorspace.bytes_per_cell = bytes_per_cell;
     self->colorspace.reverse_pixels_in_byte = reverse_pixels_in_byte;
@@ -60,19 +63,22 @@ void displayio_display_core_construct(displayio_display_core_t* self,
 
     // (framebufferdisplay already validated its 'bus' is a buffer-protocol object)
     if (bus) {
-        if (MP_OBJ_IS_TYPE(bus, &displayio_parallelbus_type)) {
-            self->bus_reset = common_hal_displayio_parallelbus_reset;
-            self->bus_free = common_hal_displayio_parallelbus_bus_free;
-            self->begin_transaction = common_hal_displayio_parallelbus_begin_transaction;
-            self->send = common_hal_displayio_parallelbus_send;
-            self->end_transaction = common_hal_displayio_parallelbus_end_transaction;
-        } else if (MP_OBJ_IS_TYPE(bus, &displayio_fourwire_type)) {
+        #if CIRCUITPY_PARALLELDISPLAY
+        if (mp_obj_is_type(bus, &paralleldisplay_parallelbus_type)) {
+            self->bus_reset = common_hal_paralleldisplay_parallelbus_reset;
+            self->bus_free = common_hal_paralleldisplay_parallelbus_bus_free;
+            self->begin_transaction = common_hal_paralleldisplay_parallelbus_begin_transaction;
+            self->send = common_hal_paralleldisplay_parallelbus_send;
+            self->end_transaction = common_hal_paralleldisplay_parallelbus_end_transaction;
+        } else
+        #endif
+        if (mp_obj_is_type(bus, &displayio_fourwire_type)) {
             self->bus_reset = common_hal_displayio_fourwire_reset;
             self->bus_free = common_hal_displayio_fourwire_bus_free;
             self->begin_transaction = common_hal_displayio_fourwire_begin_transaction;
             self->send = common_hal_displayio_fourwire_send;
             self->end_transaction = common_hal_displayio_fourwire_end_transaction;
-        } else if (MP_OBJ_IS_TYPE(bus, &displayio_i2cdisplay_type)) {
+        } else if (mp_obj_is_type(bus, &displayio_i2cdisplay_type)) {
             self->bus_reset = common_hal_displayio_i2cdisplay_reset;
             self->bus_free = common_hal_displayio_i2cdisplay_bus_free;
             self->begin_transaction = common_hal_displayio_i2cdisplay_begin_transaction;
@@ -85,7 +91,10 @@ void displayio_display_core_construct(displayio_display_core_t* self,
     self->bus = bus;
 
 
-    supervisor_start_terminal(width, height);
+    // (offsetof core is equal in all display types)
+    if (self == &displays[0].display.core) {
+        supervisor_start_terminal(width, height);
+    }
 
     self->width = width;
     self->height = height;
@@ -95,8 +104,8 @@ void displayio_display_core_construct(displayio_display_core_t* self,
     displayio_display_core_set_rotation(self, rotation);
 }
 
-void displayio_display_core_set_rotation( displayio_display_core_t* self,
-        int rotation) {
+void displayio_display_core_set_rotation(displayio_display_core_t *self,
+    int rotation) {
     int height = self->height;
     int width = self->width;
 
@@ -153,7 +162,7 @@ void displayio_display_core_set_rotation( displayio_display_core_t* self,
     }
 }
 
-bool displayio_display_core_show(displayio_display_core_t* self, displayio_group_t* root_group) {
+bool displayio_display_core_show(displayio_display_core_t *self, displayio_group_t *root_group) {
     if (root_group == NULL) {
         if (!circuitpython_splash.in_group) {
             root_group = &circuitpython_splash;
@@ -180,39 +189,43 @@ bool displayio_display_core_show(displayio_display_core_t* self, displayio_group
     return true;
 }
 
-uint16_t displayio_display_core_get_width(displayio_display_core_t* self){
+uint16_t displayio_display_core_get_width(displayio_display_core_t *self) {
     return self->width;
 }
 
-uint16_t displayio_display_core_get_height(displayio_display_core_t* self){
+uint16_t displayio_display_core_get_height(displayio_display_core_t *self) {
     return self->height;
 }
 
-void displayio_display_core_set_dither(displayio_display_core_t* self, bool dither){
+void displayio_display_core_set_dither(displayio_display_core_t *self, bool dither) {
     self->colorspace.dither = dither;
 }
 
-bool displayio_display_core_get_dither(displayio_display_core_t* self){
+bool displayio_display_core_get_dither(displayio_display_core_t *self) {
     return self->colorspace.dither;
 }
 
 bool displayio_display_core_bus_free(displayio_display_core_t *self) {
-    return self->bus_free(self->bus);
+    return !self->bus || self->bus_free(self->bus);
 }
 
-bool displayio_display_core_begin_transaction(displayio_display_core_t* self) {
+bool displayio_display_core_begin_transaction(displayio_display_core_t *self) {
     return self->begin_transaction(self->bus);
 }
 
-void displayio_display_core_end_transaction(displayio_display_core_t* self) {
+void displayio_display_core_end_transaction(displayio_display_core_t *self) {
     self->end_transaction(self->bus);
 }
 
-void displayio_display_core_set_region_to_update(displayio_display_core_t* self, uint8_t column_command, uint8_t row_command, uint16_t set_current_column_command, uint16_t set_current_row_command, bool data_as_commands, bool always_toggle_chip_select, displayio_area_t* area) {
-    uint16_t x1 = area->x1;
-    uint16_t x2 = area->x2;
-    uint16_t y1 = area->y1;
-    uint16_t y2 = area->y2;
+void displayio_display_core_set_region_to_update(displayio_display_core_t *self, uint8_t column_command,
+    uint8_t row_command, uint16_t set_current_column_command, uint16_t set_current_row_command,
+    bool data_as_commands, bool always_toggle_chip_select,
+    displayio_area_t *area, bool SH1107_addressing) {
+    uint16_t x1 = area->x1 + self->colstart;
+    uint16_t x2 = area->x2 + self->colstart;
+    uint16_t y1 = area->y1 + self->rowstart;
+    uint16_t y2 = area->y2 + self->rowstart;
+
     // Collapse down the dimension where multiple pixels are in a byte.
     if (self->colorspace.depth < 8) {
         uint8_t pixels_per_byte = 8 / self->colorspace.depth;
@@ -224,6 +237,9 @@ void displayio_display_core_set_region_to_update(displayio_display_core_t* self,
             y2 /= pixels_per_byte * self->colorspace.bytes_per_cell;
         }
     }
+
+    x2 -= 1;
+    y2 -= 1;
 
     display_chip_select_behavior_t chip_select = CHIP_SELECT_UNTOUCHED;
     if (always_toggle_chip_select || data_as_commands) {
@@ -242,19 +258,28 @@ void displayio_display_core_set_region_to_update(displayio_display_core_t* self,
     } else {
         data_type = DISPLAY_COMMAND;
     }
+
     if (self->ram_width < 0x100) {
-        data[data_length++] = x1 + self->colstart;
-        data[data_length++] = x2 - 1 + self->colstart;
+        data[data_length++] = x1;
+        data[data_length++] = x2;
     } else {
-        x1 += self->colstart;
-        x2 += self->colstart - 1;
         data[data_length++] = x1 >> 8;
         data[data_length++] = x1 & 0xff;
         data[data_length++] = x2 >> 8;
         data[data_length++] = x2 & 0xff;
     }
+
+    // Quirk for SH1107 "SH1107_addressing"
+    //     Column lower command = 0x00, Column upper command = 0x10
+    if (SH1107_addressing) {
+        data[0] = ((x1 >> 4) & 0x0F) | 0x10; // 0x10 to 0x17
+        data[1] = x1 & 0x0F; // 0x00 to 0x0F
+        data_length = 2;
+    }
+
     self->send(self->bus, data_type, chip_select, data, data_length);
     displayio_display_core_end_transaction(self);
+
     if (set_current_column_command != NO_COMMAND) {
         uint8_t command = set_current_column_command;
         displayio_display_core_begin_transaction(self);
@@ -272,17 +297,25 @@ void displayio_display_core_set_region_to_update(displayio_display_core_t* self,
         self->send(self->bus, DISPLAY_COMMAND, CHIP_SELECT_UNTOUCHED, data, 1);
         data_length = 0;
     }
+
     if (self->ram_height < 0x100) {
-        data[data_length++] = y1 + self->rowstart;
-        data[data_length++] = y2 - 1 + self->rowstart;
+        data[data_length++] = y1;
+        data[data_length++] = y2;
     } else {
-        y1 += self->rowstart;
-        y2 += self->rowstart - 1;
         data[data_length++] = y1 >> 8;
         data[data_length++] = y1 & 0xff;
         data[data_length++] = y2 >> 8;
         data[data_length++] = y2 & 0xff;
     }
+
+    // Quirk for SH1107 "SH1107_addressing"
+    //     Page address command = 0xB0
+    if (SH1107_addressing) {
+        // set the page to our y value
+        data[0] = 0xB0 | y1;
+        data_length = 1;
+    }
+
     self->send(self->bus, data_type, chip_select, data, data_length);
     displayio_display_core_end_transaction(self);
 
@@ -295,34 +328,44 @@ void displayio_display_core_set_region_to_update(displayio_display_core_t* self,
     }
 }
 
-void displayio_display_core_start_refresh(displayio_display_core_t* self) {
+bool displayio_display_core_start_refresh(displayio_display_core_t *self) {
+    if (!displayio_display_core_bus_free(self)) {
+        // Can't acquire display bus; skip updating this display. Try next display.
+        return false;
+    }
+    if (self->refresh_in_progress) {
+        return false;
+    }
+    self->refresh_in_progress = true;
     self->last_refresh = supervisor_ticks_ms64();
+    return true;
 }
 
-void displayio_display_core_finish_refresh(displayio_display_core_t* self) {
+void displayio_display_core_finish_refresh(displayio_display_core_t *self) {
     if (self->current_group != NULL) {
         DISPLAYIO_CORE_DEBUG("displayiocore group_finish_refresh\n");
         displayio_group_finish_refresh(self->current_group);
     }
     self->full_refresh = false;
+    self->refresh_in_progress = false;
     self->last_refresh = supervisor_ticks_ms64();
 }
 
-void release_display_core(displayio_display_core_t* self) {
+void release_display_core(displayio_display_core_t *self) {
     if (self->current_group != NULL) {
         self->current_group->in_group = false;
     }
 }
 
-void displayio_display_core_collect_ptrs(displayio_display_core_t* self) {
+void displayio_display_core_collect_ptrs(displayio_display_core_t *self) {
     gc_collect_ptr(self->current_group);
 }
 
-bool displayio_display_core_fill_area(displayio_display_core_t *self, displayio_area_t* area, uint32_t* mask, uint32_t *buffer) {
+bool displayio_display_core_fill_area(displayio_display_core_t *self, displayio_area_t *area, uint32_t *mask, uint32_t *buffer) {
     return displayio_group_fill_area(self->current_group, &self->colorspace, area, mask, buffer);
 }
 
-bool displayio_display_core_clip_area(displayio_display_core_t *self, const displayio_area_t* area, displayio_area_t* clipped) {
+bool displayio_display_core_clip_area(displayio_display_core_t *self, const displayio_area_t *area, displayio_area_t *clipped) {
     bool overlaps = displayio_area_compute_overlap(&self->area, area, clipped);
     if (!overlaps) {
         return false;

@@ -27,6 +27,7 @@
 #ifndef MICROPY_INCLUDED_NRF_COMMON_HAL_BLEIO_INIT_H
 #define MICROPY_INCLUDED_NRF_COMMON_HAL_BLEIO_INIT_H
 
+void bleio_background(void);
 void bleio_reset(void);
 
 typedef struct {
@@ -43,8 +44,5 @@ typedef struct {
 void check_nrf_error(uint32_t err_code);
 void check_gatt_status(uint16_t gatt_status);
 void check_sec_status(uint8_t sec_status);
-
-// Track if the user code modified the BLE state to know if we need to undo it on reload.
-bool vm_used_ble;
 
 #endif // MICROPY_INCLUDED_NRF_COMMON_HAL_BLEIO_INIT_H

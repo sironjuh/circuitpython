@@ -25,20 +25,21 @@
  * THE SOFTWARE.
  */
 #include <stdbool.h>
+#include <string.h>
 
 #include "shared-bindings/busio/SPI.h"
 #include "py/mperrno.h"
 #include "py/runtime.h"
 
 #include "shared-bindings/microcontroller/__init__.h"
-#include "boards/board.h"
+#include "supervisor/board.h"
 #include "supervisor/shared/translate.h"
-#include "common-hal/microcontroller/Pin.h"
+#include "shared-bindings/microcontroller/Pin.h"
 
 // Note that any bugs introduced in this file can cause crashes at startup
 // for chips using external SPI flash.
 
-//arrays use 0 based numbering: SPI1 is stored at index 0
+// arrays use 0 based numbering: SPI1 is stored at index 0
 #define MAX_SPI 6
 
 STATIC bool reserved_spi[MAX_SPI];
@@ -48,28 +49,32 @@ STATIC bool never_reset_spi[MAX_SPI];
 STATIC void spi_clock_enable(uint8_t mask);
 STATIC void spi_clock_disable(uint8_t mask);
 
-STATIC uint32_t get_busclock(SPI_TypeDef * instance) {
+STATIC uint32_t get_busclock(SPI_TypeDef *instance) {
     #if (CPY_STM32H7)
-        if (instance == SPI1 || instance == SPI2 || instance == SPI3) {
-            return HAL_RCCEx_GetPeriphCLKFreq(RCC_PERIPHCLK_SPI123);
-        } else if (instance == SPI4 || instance == SPI5) {
-            return HAL_RCCEx_GetPeriphCLKFreq(RCC_PERIPHCLK_SPI45);
-        } else {
-            return HAL_RCCEx_GetPeriphCLKFreq(RCC_PERIPHCLK_SPI6);
-        }
-    #elif (CPY_STM32F4 || CPY_STM32F7)
-        //SPI2 and 3 are on PCLK1, if they exist.
-        #ifdef SPI2
-            if (instance == SPI2) return HAL_RCC_GetPCLK1Freq();
-        #endif
-        #ifdef SPI3
-            if (instance == SPI3) return HAL_RCC_GetPCLK1Freq();
-        #endif
-        return HAL_RCC_GetPCLK2Freq();
+    if (instance == SPI1 || instance == SPI2 || instance == SPI3) {
+        return HAL_RCCEx_GetPeriphCLKFreq(RCC_PERIPHCLK_SPI123);
+    } else if (instance == SPI4 || instance == SPI5) {
+        return HAL_RCCEx_GetPeriphCLKFreq(RCC_PERIPHCLK_SPI45);
+    } else {
+        return HAL_RCCEx_GetPeriphCLKFreq(RCC_PERIPHCLK_SPI6);
+    }
+    #elif (CPY_STM32F4 || CPY_STM32F7 || CPY_STM32L4)
+    // SPI2 and 3 are on PCLK1, if they exist.
+    #ifdef SPI2
+    if (instance == SPI2) {
+        return HAL_RCC_GetPCLK1Freq();
+    }
+    #endif
+    #ifdef SPI3
+    if (instance == SPI3) {
+        return HAL_RCC_GetPCLK1Freq();
+    }
+    #endif
+    return HAL_RCC_GetPCLK2Freq();
     #endif
 }
 
-STATIC uint32_t stm32_baud_to_spi_div(uint32_t baudrate, uint16_t * prescaler, uint32_t busclock) {
+STATIC uint32_t stm32_baud_to_spi_div(uint32_t baudrate, uint16_t *prescaler, uint32_t busclock) {
     static const uint32_t baud_map[8][2] = {
         {2,SPI_BAUDRATEPRESCALER_2},
         {4,SPI_BAUDRATEPRESCALER_4},
@@ -84,13 +89,13 @@ STATIC uint32_t stm32_baud_to_spi_div(uint32_t baudrate, uint16_t * prescaler, u
     uint16_t divisor;
     do {
         divisor = baud_map[i][0];
-        if (baudrate >= (busclock/divisor)) {
+        if (baudrate >= (busclock / divisor)) {
             *prescaler = divisor;
             return baud_map[i][1];
         }
         i++;
     } while (divisor != 256);
-    //only gets here if requested baud is lower than minimum
+    // only gets here if requested baud is lower than minimum
     *prescaler = 256;
     return SPI_BAUDRATEPRESCALER_256;
 }
@@ -107,106 +112,71 @@ void spi_reset(void) {
     spi_clock_disable(ALL_CLOCKS & ~(never_reset_mask));
 }
 
-void common_hal_busio_spi_construct(busio_spi_obj_t *self,
-         const mcu_pin_obj_t * sck, const mcu_pin_obj_t * mosi,
-         const mcu_pin_obj_t * miso) {
+STATIC const mcu_periph_obj_t *find_pin_function(const mcu_periph_obj_t *table, size_t sz, const mcu_pin_obj_t *pin, int periph_index) {
+    for (size_t i = 0; i < sz; i++, table++) {
+        if (periph_index == table->periph_index && pin == table->pin) {
+            return table;
+        }
+    }
+    return NULL;
+}
 
-    //match pins to SPI objects
-    SPI_TypeDef * SPIx;
+// match pins to SPI objects
+STATIC int check_pins(busio_spi_obj_t *self,
+    const mcu_pin_obj_t *sck, const mcu_pin_obj_t *mosi,
+    const mcu_pin_obj_t *miso) {
+    bool spi_taken = false;
 
     uint8_t sck_len = MP_ARRAY_SIZE(mcu_spi_sck_list);
     uint8_t mosi_len = MP_ARRAY_SIZE(mcu_spi_mosi_list);
     uint8_t miso_len = MP_ARRAY_SIZE(mcu_spi_miso_list);
-    bool spi_taken = false;
 
-    //SCK is not optional. MOSI and MISO are
+    // Loop over each possibility for SCK.  Check whether MISO and/or MOSI can be used on the same peripheral
     for (uint i = 0; i < sck_len; i++) {
-        if (mcu_spi_sck_list[i].pin == sck) {
-            //if both MOSI and MISO exist, loop search normally
-            if ((mosi != NULL) && (miso != NULL)) {
-                //MOSI
-                for (uint j = 0; j < mosi_len; j++) {
-                    if (mcu_spi_mosi_list[j].pin == mosi) {
-                        //MISO
-                        for (uint k = 0; k < miso_len; k++) {
-                            if ((mcu_spi_miso_list[k].pin == miso) //everything needs the same index
-                                && (mcu_spi_sck_list[i].periph_index == mcu_spi_mosi_list[j].periph_index)
-                                && (mcu_spi_sck_list[i].periph_index == mcu_spi_miso_list[k].periph_index)) {
-                                //keep looking if the SPI is taken, edge case
-                                if (reserved_spi[mcu_spi_sck_list[i].periph_index - 1]) {
-                                    spi_taken = true;
-                                    continue;
-                                }
-                                //store pins if not
-                                self->sck = &mcu_spi_sck_list[i];
-                                self->mosi = &mcu_spi_mosi_list[j];
-                                self->miso = &mcu_spi_miso_list[k];
-                                break;
-                            }
-                        }
-                        if (self->sck != NULL) {
-                            break; // Multi-level break to pick lowest peripheral
-                        }
-                    }
-                }
-                if (self->sck != NULL) {
-                    break;
-                }
-            // if just MISO, reduce search
-            } else if (miso != NULL) {
-                for (uint j = 0; j < miso_len; j++) {
-                    if ((mcu_spi_miso_list[j].pin == miso) //only SCK and MISO need the same index
-                        && (mcu_spi_sck_list[i].periph_index == mcu_spi_miso_list[j].periph_index)) {
-                        if (reserved_spi[mcu_spi_sck_list[i].periph_index - 1]) {
-                            spi_taken = true;
-                            continue;
-                        }
-                        self->sck = &mcu_spi_sck_list[i];
-                        self->mosi = NULL;
-                        self->miso = &mcu_spi_miso_list[j];
-                        break;
-                    }
-                }
-                if (self->sck != NULL) {
-                    break;
-                }
-            // if just MOSI, reduce search
-            } else if (mosi != NULL) {
-                for (uint j = 0; j < mosi_len; j++) {
-                    if ((mcu_spi_mosi_list[j].pin == mosi) //only SCK and MOSI need the same index
-                        && (mcu_spi_sck_list[i].periph_index == mcu_spi_mosi_list[j].periph_index)) {
-                        if (reserved_spi[mcu_spi_sck_list[i].periph_index - 1]) {
-                            spi_taken = true;
-                            continue;
-                        }
-                        self->sck = &mcu_spi_sck_list[i];
-                        self->mosi = &mcu_spi_mosi_list[j];
-                        self->miso = NULL;
-                        break;
-                    }
-                }
-                if (self->sck != NULL) {
-                    break;
-                }
-            } else {
-                //throw an error immediately
-                mp_raise_ValueError(translate("Must provide MISO or MOSI pin"));
-            }
+        const mcu_periph_obj_t *mcu_spi_sck = &mcu_spi_sck_list[i];
+        if (mcu_spi_sck->pin != sck) {
+            continue;
         }
+
+        int periph_index = mcu_spi_sck->periph_index;
+
+        const mcu_periph_obj_t *mcu_spi_miso = NULL;
+        if (miso && !(mcu_spi_miso = find_pin_function(mcu_spi_miso_list, miso_len, miso, periph_index))) {
+            continue;
+        }
+
+        const mcu_periph_obj_t *mcu_spi_mosi = NULL;
+        if (mosi && !(mcu_spi_mosi = find_pin_function(mcu_spi_mosi_list, mosi_len, mosi, periph_index))) {
+            continue;
+        }
+
+        if (reserved_spi[periph_index - 1]) {
+            spi_taken = true;
+            continue;
+        }
+
+        self->sck = mcu_spi_sck;
+        self->mosi = mcu_spi_mosi;
+        self->miso = mcu_spi_miso;
+
+        return periph_index;
     }
 
-    //handle typedef selection, errors
-    if (self->sck != NULL && (self->mosi != NULL || self->miso != NULL)) {
-        SPIx = mcu_spi_banks[self->sck->periph_index - 1];
+    if (spi_taken) {
+        mp_raise_ValueError(translate("Hardware busy, try alternative pins"));
     } else {
-        if (spi_taken) {
-            mp_raise_ValueError(translate("Hardware busy, try alternative pins"));
-        } else {
-            mp_raise_ValueError(translate("Invalid SPI pin selection"));
-        }
+        mp_raise_ValueError_varg(translate("Invalid %q pin selection"), MP_QSTR_SPI);
     }
+}
 
-    //Start GPIO for each pin
+void common_hal_busio_spi_construct(busio_spi_obj_t *self,
+    const mcu_pin_obj_t *sck, const mcu_pin_obj_t *mosi,
+    const mcu_pin_obj_t *miso) {
+
+    int periph_index = check_pins(self, sck, mosi, miso);
+    SPI_TypeDef *SPIx = mcu_spi_banks[periph_index - 1];
+
+    // Start GPIO for each pin
     GPIO_InitTypeDef GPIO_InitStruct = {0};
     GPIO_InitStruct.Pin = pin_mask(sck->number);
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
@@ -249,8 +219,7 @@ void common_hal_busio_spi_construct(busio_spi_obj_t *self,
     self->handle.Init.TIMode = SPI_TIMODE_DISABLE;
     self->handle.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
     self->handle.Init.CRCPolynomial = 10;
-    if (HAL_SPI_Init(&self->handle) != HAL_OK)
-    {
+    if (HAL_SPI_Init(&self->handle) != HAL_OK) {
         mp_raise_ValueError(translate("SPI Init Error"));
     }
     self->baudrate = (get_busclock(SPIx) / 16);
@@ -259,12 +228,12 @@ void common_hal_busio_spi_construct(busio_spi_obj_t *self,
     self->phase = 0;
     self->bits = 8;
 
-    claim_pin(sck);
+    common_hal_mcu_pin_claim(sck);
     if (self->mosi != NULL) {
-        claim_pin(mosi);
+        common_hal_mcu_pin_claim(mosi);
     }
     if (self->miso != NULL) {
-        claim_pin(miso);
+        common_hal_mcu_pin_claim(miso);
     }
 }
 
@@ -288,7 +257,7 @@ void common_hal_busio_spi_deinit(busio_spi_obj_t *self) {
     if (common_hal_busio_spi_deinited(self)) {
         return;
     }
-    spi_clock_disable(1<<(self->sck->periph_index - 1));
+    spi_clock_disable(1 << (self->sck->periph_index - 1));
     reserved_spi[self->sck->periph_index - 1] = false;
     never_reset_spi[self->sck->periph_index - 1] = false;
 
@@ -305,14 +274,14 @@ void common_hal_busio_spi_deinit(busio_spi_obj_t *self) {
 }
 
 bool common_hal_busio_spi_configure(busio_spi_obj_t *self,
-        uint32_t baudrate, uint8_t polarity, uint8_t phase, uint8_t bits) {
-    //This resets the SPI, so check before updating it redundantly
-    if (baudrate == self->baudrate && polarity== self->polarity
+    uint32_t baudrate, uint8_t polarity, uint8_t phase, uint8_t bits) {
+    // This resets the SPI, so check before updating it redundantly
+    if (baudrate == self->baudrate && polarity == self->polarity
         && phase == self->phase && bits == self->bits) {
         return true;
     }
 
-    //Deinit SPI
+    // Deinit SPI
     HAL_SPI_DeInit(&self->handle);
 
     self->handle.Init.DataSize = (bits == 16) ? SPI_DATASIZE_16BIT : SPI_DATASIZE_8BIT;
@@ -320,10 +289,9 @@ bool common_hal_busio_spi_configure(busio_spi_obj_t *self,
     self->handle.Init.CLKPhase = (phase) ? SPI_PHASE_2EDGE : SPI_PHASE_1EDGE;
 
     self->handle.Init.BaudRatePrescaler = stm32_baud_to_spi_div(baudrate, &self->prescaler,
-                                            get_busclock(self->handle.Instance));
+        get_busclock(self->handle.Instance));
 
-    if (HAL_SPI_Init(&self->handle) != HAL_OK)
-    {
+    if (HAL_SPI_Init(&self->handle) != HAL_OK) {
         mp_raise_ValueError(translate("SPI Re-initialization error"));
     }
 
@@ -337,7 +305,7 @@ bool common_hal_busio_spi_configure(busio_spi_obj_t *self,
 bool common_hal_busio_spi_try_lock(busio_spi_obj_t *self) {
     bool grabbed_lock = false;
 
-    //Critical section code that may be required at some point.
+    // Critical section code that may be required at some point.
     // uint32_t store_primask = __get_PRIMASK();
     // __disable_irq();
     // __DMB();
@@ -362,44 +330,50 @@ void common_hal_busio_spi_unlock(busio_spi_obj_t *self) {
 }
 
 bool common_hal_busio_spi_write(busio_spi_obj_t *self,
-        const uint8_t *data, size_t len) {
+    const uint8_t *data, size_t len) {
     if (self->mosi == NULL) {
         mp_raise_ValueError(translate("No MOSI Pin"));
     }
-    HAL_StatusTypeDef result = HAL_SPI_Transmit (&self->handle, (uint8_t *)data, (uint16_t)len, HAL_MAX_DELAY);
+    HAL_StatusTypeDef result = HAL_SPI_Transmit(&self->handle, (uint8_t *)data, (uint16_t)len, HAL_MAX_DELAY);
     return result == HAL_OK;
 }
 
 bool common_hal_busio_spi_read(busio_spi_obj_t *self,
-        uint8_t *data, size_t len, uint8_t write_value) {
+    uint8_t *data, size_t len, uint8_t write_value) {
     if (self->miso == NULL) {
         mp_raise_ValueError(translate("No MISO Pin"));
     }
-    HAL_StatusTypeDef result = HAL_SPI_Receive (&self->handle, data, (uint16_t)len, HAL_MAX_DELAY);
+    HAL_StatusTypeDef result = HAL_OK;
+    if (self->mosi == NULL) {
+        result = HAL_SPI_Receive(&self->handle, data, (uint16_t)len, HAL_MAX_DELAY);
+    } else {
+        memset(data, write_value, len);
+        result = HAL_SPI_TransmitReceive(&self->handle, data, data, (uint16_t)len, HAL_MAX_DELAY);
+    }
     return result == HAL_OK;
 }
 
 bool common_hal_busio_spi_transfer(busio_spi_obj_t *self,
-        uint8_t *data_out, uint8_t *data_in, size_t len) {
+    const uint8_t *data_out, uint8_t *data_in, size_t len) {
     if (self->miso == NULL || self->mosi == NULL) {
         mp_raise_ValueError(translate("Missing MISO or MOSI Pin"));
     }
-    HAL_StatusTypeDef result = HAL_SPI_TransmitReceive (&self->handle,
-        data_out, data_in, (uint16_t)len,HAL_MAX_DELAY);
+    HAL_StatusTypeDef result = HAL_SPI_TransmitReceive(&self->handle,
+        (uint8_t *)data_out, data_in, (uint16_t)len,HAL_MAX_DELAY);
     return result == HAL_OK;
 }
 
-uint32_t common_hal_busio_spi_get_frequency(busio_spi_obj_t* self) {
-    //returns actual frequency
-    uint32_t result = HAL_RCC_GetPCLK2Freq()/self->prescaler;
+uint32_t common_hal_busio_spi_get_frequency(busio_spi_obj_t *self) {
+    // returns actual frequency
+    uint32_t result = HAL_RCC_GetPCLK2Freq() / self->prescaler;
     return result;
 }
 
-uint8_t common_hal_busio_spi_get_phase(busio_spi_obj_t* self) {
+uint8_t common_hal_busio_spi_get_phase(busio_spi_obj_t *self) {
     return self->phase;
 }
 
-uint8_t common_hal_busio_spi_get_polarity(busio_spi_obj_t* self) {
+uint8_t common_hal_busio_spi_get_polarity(busio_spi_obj_t *self) {
     return self->polarity;
 }
 

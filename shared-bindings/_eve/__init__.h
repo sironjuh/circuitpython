@@ -27,6 +27,8 @@
 #ifndef MICROPY_INCLUDED_SHARED_BINDINGS__EVE___INIT___H
 #define MICROPY_INCLUDED_SHARED_BINDINGS__EVE___INIT___H
 
+#include "shared-module/_eve/__init__.h"
+
 void common_hal__eve_flush(common_hal__eve_t *eve);
 void common_hal__eve_add(common_hal__eve_t *eve, size_t len, void *buf);
 void common_hal__eve_Vertex2f(common_hal__eve_t *eve, mp_float_t x, mp_float_t y);
@@ -61,11 +63,11 @@ void common_hal__eve_ColorRGB(common_hal__eve_t *eve, uint32_t red, uint32_t gre
 void common_hal__eve_Display(common_hal__eve_t *eve);
 void common_hal__eve_End(common_hal__eve_t *eve);
 void common_hal__eve_Jump(common_hal__eve_t *eve, uint32_t dest);
-void common_hal__eve_LineWidth(common_hal__eve_t *eve, uint32_t width);
+void common_hal__eve_LineWidth(common_hal__eve_t *eve, mp_float_t width);
 void common_hal__eve_Macro(common_hal__eve_t *eve, uint32_t m);
 void common_hal__eve_Nop(common_hal__eve_t *eve);
 void common_hal__eve_PaletteSource(common_hal__eve_t *eve, uint32_t addr);
-void common_hal__eve_PointSize(common_hal__eve_t *eve, uint32_t size);
+void common_hal__eve_PointSize(common_hal__eve_t *eve, mp_float_t size);
 void common_hal__eve_RestoreContext(common_hal__eve_t *eve);
 void common_hal__eve_Return(common_hal__eve_t *eve);
 void common_hal__eve_SaveContext(common_hal__eve_t *eve);
@@ -76,8 +78,8 @@ void common_hal__eve_StencilMask(common_hal__eve_t *eve, uint32_t mask);
 void common_hal__eve_StencilOp(common_hal__eve_t *eve, uint32_t sfail, uint32_t spass);
 void common_hal__eve_TagMask(common_hal__eve_t *eve, uint32_t mask);
 void common_hal__eve_Tag(common_hal__eve_t *eve, uint32_t s);
-void common_hal__eve_VertexTranslateX(common_hal__eve_t *eve, uint32_t x);
-void common_hal__eve_VertexTranslateY(common_hal__eve_t *eve, uint32_t y);
+void common_hal__eve_VertexTranslateX(common_hal__eve_t *eve, mp_float_t x);
+void common_hal__eve_VertexTranslateY(common_hal__eve_t *eve, mp_float_t y);
 void common_hal__eve_VertexFormat(common_hal__eve_t *eve, uint32_t frac);
 void common_hal__eve_Vertex2ii(common_hal__eve_t *eve, uint32_t x, uint32_t y, uint32_t handle, uint32_t cell);
 

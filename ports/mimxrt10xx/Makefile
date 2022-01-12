@@ -2,8 +2,8 @@
 #
 # The MIT License (MIT)
 #
-# Copyright (c) 2019 Dan Halbert for Adafruit Industries
-# Copyright (c) 2019 Artur Pacholec
+# SPDX-FileCopyrightText: Copyright (c) 2019 Dan Halbert for Adafruit Industries
+# SPDX-FileCopyrightText: Copyright (c) 2019 Artur Pacholec
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -60,7 +60,7 @@ INC += \
 	-I. \
 	-I../.. \
 	-I../lib/mp-readline \
-	-I../lib/timeutils \
+	-I../shared/timeutils \
 	-I../../lib/tinyusb/src \
 	-I../../supervisor/shared/usb \
 	-I$(BUILD) \
@@ -75,22 +75,24 @@ INC += \
 
 # NDEBUG disables assert() statements. This reduces code size pretty dramatically, per tannewt.
 
-CFLAGS += -Os -DNDEBUG
+CFLAGS += -Os -ftree-vrp -DNDEBUG -ffreestanding
 
 # TinyUSB defines
-CFLAGS += -DCFG_TUSB_MCU=OPT_MCU_MIMXRT10XX -DCFG_TUD_MIDI_RX_BUFSIZE=128 -DCFG_TUD_CDC_RX_BUFSIZE=256 -DCFG_TUD_MIDI_TX_BUFSIZE=128 -DCFG_TUD_CDC_TX_BUFSIZE=256 -DCFG_TUD_MSC_BUFSIZE=1024
+CFLAGS += -DCFG_TUSB_MCU=OPT_MCU_MIMXRT10XX -DCFG_TUD_MIDI_RX_BUFSIZE=512 -DCFG_TUD_CDC_RX_BUFSIZE=512 -DCFG_TUD_MIDI_TX_BUFSIZE=512 -DCFG_TUD_CDC_TX_BUFSIZE=512 -DCFG_TUD_MSC_BUFSIZE=1024
 
 #Debugging/Optimization
+# Never set -fno-inline because we use inline to move small functions into routines that must be
+# in RAM. If inlining is disallowed, then we may end up calling a function in flash when we cannot.
 ifeq ($(DEBUG), 1)
   # You may want to disable -flto if it interferes with debugging.
   # CFLAGS += -flto -flto-partition=none
   # You may want to enable these flags to make setting breakpoints easier.
-  CFLAGS += -fno-inline -fno-ipa-sra
+  CFLAGS += -fno-ipa-sra
 else
   #CFLAGS += -flto -flto-partition=none
 endif
 
-CFLAGS += $(INC) -ggdb -Wall -Wno-cast-align -std=gnu11 -nostdlib -fshort-enums $(BASE_CFLAGS) $(CFLAGS_MOD) $(COPT)
+CFLAGS += $(INC) -ggdb -Wall -Werror -std=gnu11 -nostdlib -fshort-enums $(BASE_CFLAGS) $(CFLAGS_MOD) $(COPT) -Werror=missing-prototypes
 
 # TODO: add these when -Werror is applied
 # Disable some warnings, as do most ports. NXP SDK causes undef, tinyusb causes cast-align
@@ -105,8 +107,13 @@ CFLAGS += \
 	-DCPU_$(CHIP_VARIANT) \
 	-DDEBUG \
 	-DIMXRT10XX \
-	-Os -g3 -Wno-unused-parameter \
+	-g3 -Wno-unused-parameter \
 	-ffunction-sections -fdata-sections -fstack-usage
+
+OPTIMIZATION_FLAGS ?= -O2 -fno-inline-functions
+
+# option to override compiler optimization level, set in boards/$(BOARD)/mpconfigboard.mk
+CFLAGS += $(OPTIMIZATION_FLAGS)
 
 LD_FILES = $(wildcard boards/$(BOARD)/*.ld) $(addprefix linking/, flash/$(FLASH).ld chip_family/$(CHIP_FAMILY).ld common.ld)
 
@@ -141,58 +148,21 @@ SRC_SDK := \
 	system_$(CHIP_FAMILY).c \
 
 SRC_SDK := $(addprefix sdk/devices/$(CHIP_FAMILY)/, $(SRC_SDK))
+$(addprefix $(BUILD)/, $(SRC_SDK:.c=.o)): CFLAGS += -Wno-undef -Wno-missing-prototypes -Wno-cast-align
 
-SRC_C = \
+SRC_C += \
 	background.c \
 	boards/$(BOARD)/board.c \
 	boards/$(BOARD)/flash_config.c \
 	boards/$(BOARD)/pins.c \
 	fatfs_port.c \
-	lib/mp-readline/readline.c \
-	lib/oofatfs/ff.c \
-	lib/oofatfs/option/ccsbcs.c \
-	lib/timeutils/timeutils.c \
-	lib/utils/buffer_helper.c \
-	lib/utils/context_manager_helpers.c \
-	lib/utils/interrupt_char.c \
-	lib/utils/pyexec.c \
-	lib/utils/stdout_helpers.c \
-	lib/utils/sys_stdio_mphal.c \
-	lib/tinyusb/src/portable/nxp/transdimension/dcd_transdimension.c \
+	lib/tinyusb/src/portable/chipidea/ci_hs/dcd_ci_hs.c \
 	mphalport.c \
 	peripherals/mimxrt10xx/$(CHIP_FAMILY)/clocks.c \
 	peripherals/mimxrt10xx/$(CHIP_FAMILY)/periph.c \
 	peripherals/mimxrt10xx/$(CHIP_FAMILY)/pins.c \
 	reset.c \
-	supervisor/flexspi_nor_flash_ops.c \
-	supervisor/shared/memory.c
-
-
-ifeq ($(CIRCUITPY_NETWORK),1)
-CFLAGS += -DMICROPY_PY_NETWORK=1
-
-SRC_MOD += lib/netutils/netutils.c
-
-ifneq ($(MICROPY_PY_WIZNET5K),0)
-WIZNET5K_DIR=drivers/wiznet5k
-INC += -I$(TOP)/$(WIZNET5K_DIR)
-CFLAGS_MOD += -DMICROPY_PY_WIZNET5K=$(MICROPY_PY_WIZNET5K) -D_WIZCHIP_=$(MICROPY_PY_WIZNET5K)
-SRC_MOD += $(addprefix $(WIZNET5K_DIR)/,\
-        ethernet/w$(MICROPY_PY_WIZNET5K)/w$(MICROPY_PY_WIZNET5K).c \
-        ethernet/wizchip_conf.c \
-        ethernet/socket.c \
-        internet/dns/dns.c \
-        internet/dhcp/dhcp.c \
-        )
-
-endif # MICROPY_PY_WIZNET5K
-endif # CIRCUITPY_NETWORK
-
-ifeq ($(CIRCUITPY_NETWORK),1)
-ifneq ($(MICROPY_PY_WIZNET5K),0)
-SRC_SHARED_MODULE += wiznet/__init__.c wiznet/wiznet5k.c
-endif
-endif
+	supervisor/flexspi_nor_flash_ops.c
 
 # TODO
 #ifeq ($(CIRCUITPY_AUDIOBUSIO),1)
@@ -218,6 +188,7 @@ OBJ += $(addprefix $(BUILD)/, $(SRC_SHARED_MODULE_EXPANDED:.c=.o))
 ifeq ($(INTERNAL_LIBM),1)
 OBJ += $(addprefix $(BUILD)/, $(SRC_LIBM:.c=.o))
 endif
+OBJ += $(addprefix $(BUILD)/, $(SRC_CIRCUITPY_COMMON:.c=.o))
 OBJ += $(addprefix $(BUILD)/, $(SRC_S:.S=.o))
 OBJ += $(addprefix $(BUILD)/, $(SRC_MOD:.c=.o))
 
@@ -236,7 +207,7 @@ $(BUILD)/firmware.bin: $(BUILD)/firmware.elf
 $(BUILD)/firmware.uf2: $(BUILD)/firmware.elf
 	$(STEPECHO) "Create $@"
 	$(Q)$(OBJCOPY) -O binary -j .text -j .ARM.exidx -j .data -j .itcm -j .dtcm_data $^ $@-binpart
-	$(Q)$(PYTHON3) $(TOP)/tools/uf2/utils/uf2conv.py -b $(BOOTLOADER_SIZE) -f MIMXRT10XX -c -o $@ $@-binpart
+	$(Q)$(PYTHON) $(TOP)/tools/uf2/utils/uf2conv.py -b $(BOOTLOADER_SIZE) -f MIMXRT10XX -c -o $@ $@-binpart
 	$(Q)rm $@-binpart
 
 $(BUILD)/firmware.hex: $(BUILD)/firmware.elf

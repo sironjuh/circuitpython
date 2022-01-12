@@ -3,7 +3,7 @@
  *
  * The MIT License (MIT)
  *
- * Copyright (c) 2013, 2014 Damien P. George
+ * SPDX-FileCopyrightText: Copyright (c) 2013, 2014 Damien P. George
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -27,7 +27,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "lib/utils/context_manager_helpers.h"
+#include "shared/runtime/context_manager_helpers.h"
 #include "py/binary.h"
 #include "py/mphal.h"
 #include "py/nlr.h"
@@ -52,16 +52,16 @@
 //|                print("touched!")"""
 //|
 
-//|     def __init__(self, pin: microcontroller.Pin):
+//|     def __init__(self, pin: microcontroller.Pin) -> None:
 //|         """Use the TouchIn on the given pin.
 //|
 //|         :param ~microcontroller.Pin pin: the pin to read from"""
 //|         ...
 //|
 STATIC mp_obj_t touchio_touchin_make_new(const mp_obj_type_t *type,
-        mp_uint_t n_args, const mp_obj_t *args, mp_map_t *kw_args) {
+    size_t n_args, size_t n_kw, const mp_obj_t *args) {
     // check number of arguments
-    mp_arg_check_num(n_args, kw_args, 1, 1, false);
+    mp_arg_check_num(n_args, n_kw, 1, 1, false);
 
     // 1st argument is the pin
     const mcu_pin_obj_t *pin = validate_obj_is_free_pin(args[0]);
@@ -70,10 +70,10 @@ STATIC mp_obj_t touchio_touchin_make_new(const mp_obj_type_t *type,
     self->base.type = &touchio_touchin_type;
     common_hal_touchio_touchin_construct(self, pin);
 
-    return (mp_obj_t) self;
+    return (mp_obj_t)self;
 }
 
-//|     def deinit(self, ) -> Any:
+//|     def deinit(self) -> None:
 //|         """Deinitialises the TouchIn and releases any hardware resources for reuse."""
 //|         ...
 //|
@@ -90,13 +90,13 @@ STATIC void check_for_deinit(touchio_touchin_obj_t *self) {
     }
 }
 
-//|     def __enter__(self, ) -> Any:
+//|     def __enter__(self) -> TouchIn:
 //|         """No-op used by Context Managers."""
 //|         ...
 //|
 //  Provided by context manager helper.
 
-//|     def __exit__(self, ) -> Any:
+//|     def __exit__(self) -> None:
 //|         """Automatically deinitializes the hardware when exiting a context. See
 //|         :ref:`lifetime-and-contextmanagers` for more info."""
 //|         ...
@@ -108,7 +108,7 @@ STATIC mp_obj_t touchio_touchin_obj___exit__(size_t n_args, const mp_obj_t *args
 }
 STATIC MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(touchio_touchin___exit___obj, 4, 4, touchio_touchin_obj___exit__);
 
-//|     value: Any = ...
+//|     value: bool
 //|     """Whether the touch pad is being touched or not. (read-only)
 //|
 //|     True when `raw_value` > `threshold`."""
@@ -123,12 +123,12 @@ MP_DEFINE_CONST_FUN_OBJ_1(touchio_touchin_get_value_obj, touchio_touchin_obj_get
 const mp_obj_property_t touchio_touchin_value_obj = {
     .base.type = &mp_type_property,
     .proxy = {(mp_obj_t)&touchio_touchin_get_value_obj,
-              (mp_obj_t)&mp_const_none_obj,
-              (mp_obj_t)&mp_const_none_obj},
+              MP_ROM_NONE,
+              MP_ROM_NONE},
 };
 
 
-//|     raw_value: Any = ...
+//|     raw_value: int
 //|     """The raw touch measurement as an `int`. (read-only)"""
 //|
 STATIC mp_obj_t touchio_touchin_obj_get_raw_value(mp_obj_t self_in) {
@@ -142,18 +142,24 @@ MP_DEFINE_CONST_FUN_OBJ_1(touchio_touchin_get_raw_value_obj, touchio_touchin_obj
 const mp_obj_property_t touchio_touchin_raw_value_obj = {
     .base.type = &mp_type_property,
     .proxy = {(mp_obj_t)&touchio_touchin_get_raw_value_obj,
-              (mp_obj_t)&mp_const_none_obj,
-              (mp_obj_t)&mp_const_none_obj},
- };
+              MP_ROM_NONE,
+              MP_ROM_NONE},
+};
 
 
-//|     threshold: Any = ...
+//|     threshold: Optional[int]
 //|     """Minimum `raw_value` needed to detect a touch (and for `value` to be `True`).
 //|
 //|     When the **TouchIn** object is created, an initial `raw_value` is read from the pin,
 //|     and then `threshold` is set to be 100 + that value.
 //|
-//|     You can adjust `threshold` to make the pin more or less sensitive."""
+//|     You can adjust `threshold` to make the pin more or less sensitive::
+//|
+//|       import board
+//|       import touchio
+//|
+//|       touch = touchio.TouchIn(board.A1)
+//|       touch.threshold = 7300"""
 //|
 STATIC mp_obj_t touchio_touchin_obj_get_threshold(mp_obj_t self_in) {
     touchio_touchin_obj_t *self = MP_OBJ_TO_PTR(self_in);
@@ -181,7 +187,7 @@ const mp_obj_property_t touchio_touchin_threshold_obj = {
     .base.type = &mp_type_property,
     .proxy = {(mp_obj_t)&touchio_touchin_get_threshold_obj,
               (mp_obj_t)&touchio_touchin_set_threshold_obj,
-              (mp_obj_t)&mp_const_none_obj},
+              MP_ROM_NONE},
 };
 
 

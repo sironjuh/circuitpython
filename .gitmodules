@@ -1,16 +1,16 @@
+# SPDX-FileCopyrightText: 2014 MicroPython & CircuitPython contributors (https://github.com/adafruit/circuitpython/graphs/contributors)
+#
+# SPDX-License-Identifier: MIT
+
 [submodule "lib/axtls"]
 	path = lib/axtls
-	url = https://github.com/pfalcon/axtls
-	branch = micropython
+	url = https://github.com/micropython/axtls.git
 [submodule "lib/libffi"]
 	path = lib/libffi
 	url = https://github.com/atgreen/libffi
 [submodule "lib/berkeley-db-1.xx"]
 	path = lib/berkeley-db-1.xx
 	url = https://github.com/pfalcon/berkeley-db-1.xx
-[submodule "lib/uzlib"]
-	path = lib/uzlib
-	url = https://github.com/pfalcon/uzlib
 [submodule "tools/uf2"]
 	path = tools/uf2
 	url = https://github.com/Microsoft/uf2.git
@@ -140,6 +140,62 @@
 [submodule "frozen/Adafruit_CircuitPython_BLE_Apple_Notification_Center"]
 	path = frozen/Adafruit_CircuitPython_BLE_Apple_Notification_Center
 	url = https://github.com/adafruit/Adafruit_CircuitPython_BLE_Apple_Notification_Center
-[submodule "ports/esp32s2/esp-idf"]
-	path = ports/esp32s2/esp-idf
-	url = https://github.com/tannewt/esp-idf.git
+[submodule "frozen/Adafruit_CircuitPython_RFM9x"]
+	path = frozen/Adafruit_CircuitPython_RFM9x
+	url = https://github.com/adafruit/Adafruit_CircuitPython_RFM9x.git
+[submodule "frozen/Adafruit_CircuitPython_RFM69"]
+	path = frozen/Adafruit_CircuitPython_RFM69
+	url = https://github.com/adafruit/Adafruit_CircuitPython_RFM69.git
+[submodule "ports/espressif/esp-idf"]
+	path = ports/espressif/esp-idf
+	url = https://github.com/espressif/esp-idf.git
+	branch = release/v4.4
+[submodule "ports/espressif/certificates/nina-fw"]
+	path = ports/espressif/certificates/nina-fw
+	url = https://github.com/adafruit/nina-fw.git
+[submodule "frozen/Adafruit_CircuitPython_ST7789"]
+	path = frozen/Adafruit_CircuitPython_ST7789
+	url = https://github.com/adafruit/Adafruit_CircuitPython_ST7789
+[submodule "frozen/Adafruit_CircuitPython_Display_Shapes"]
+	path = frozen/Adafruit_CircuitPython_Display_Shapes
+	url = https://github.com/adafruit/Adafruit_CircuitPython_Display_Shapes
+[submodule "frozen/Adafruit_CircuitPython_Display_Text"]
+	path = frozen/Adafruit_CircuitPython_Display_Text
+	url = https://github.com/adafruit/Adafruit_CircuitPython_Display_Text
+[submodule "frozen/Adafruit_CircuitPython_ProgressBar"]
+	path = frozen/Adafruit_CircuitPython_ProgressBar
+	url = https://github.com/adafruit/Adafruit_CircuitPython_ProgressBar
+[submodule "frozen/Adafruit_CircuitPython_LC709203F"]
+	path = frozen/Adafruit_CircuitPython_LC709203F
+	url = https://github.com/adafruit/Adafruit_CircuitPython_LC709203F
+[submodule "frozen/Adafruit_CircuitPython_SimpleMath"]
+	path = frozen/Adafruit_CircuitPython_SimpleMath
+	url = https://github.com/adafruit/Adafruit_CircuitPython_SimpleMath
+[submodule "ports/raspberrypi/sdk"]
+	path = ports/raspberrypi/sdk
+	url = https://github.com/raspberrypi/pico-sdk.git
+[submodule "data/nvm.toml"]
+	path = data/nvm.toml
+	url = https://github.com/adafruit/nvm.toml.git
+	branch = main
+[submodule "frozen/Adafruit_CircuitPython_MIDI"]
+	path = frozen/Adafruit_CircuitPython_MIDI
+	url = https://github.com/adafruit/Adafruit_CircuitPython_MIDI
+[submodule "frozen/Adafruit_CircuitPython_SimpleIO"]
+	path = frozen/Adafruit_CircuitPython_SimpleIO
+	url = https://github.com/adafruit/adafruit_circuitpython_simpleio
+[submodule "lib/quirc"]
+	path = lib/quirc
+	url = https://github.com/adafruit/quirc.git
+[submodule "frozen/Adafruit_CircuitPython_APDS9960"]
+	path = frozen/Adafruit_CircuitPython_APDS9960
+	url = https://github.com/adafruit/Adafruit_CircuitPython_APDS9960
+[submodule "ports/broadcom/peripherals"]
+	path = ports/broadcom/peripherals
+	url = https://github.com/adafruit/broadcom-peripherals.git
+	branch = main-build
+[submodule "rpi-firmware"]
+	path = ports/broadcom/firmware
+	url = https://github.com/raspberrypi/rpi-firmware.git
+	branch = master
+	shallow = true

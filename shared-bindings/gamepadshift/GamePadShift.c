@@ -36,22 +36,21 @@
 //| class GamePadShift:
 //|     """Scan buttons for presses through a shift register"""
 //|
-//|     def __init__(self, clock: Any, data: Any, latch: Any):
+//|     def __init__(self, clock: digitalio.DigitalInOut, data: digitalio.DigitalInOut, latch: digitalio.DigitalInOut) -> None:
 //|         """Initializes button scanning routines.
 //|
 //|         The ``clock``, ``data`` and ``latch`` parameters are ``DigitalInOut``
 //|         objects connected to the shift register controlling the buttons.
 //|
-//|         They button presses are accumulated, until the ``get_pressed`` method
+//|         The button presses are accumulated, until the ``get_pressed`` method
 //|         is called, at which point the button state is cleared, and the new
 //|         button presses start to be recorded.
 //|
-//|         Only one gamepad (`gamepad.GamePad` or `gamepadshift.GamePadShift`)
-//|         may be used at a time."""
+//|         Only one `gamepadshift.GamePadShift` may be used at a time."""
 //|         ...
 //|
 STATIC mp_obj_t gamepadshift_make_new(const mp_obj_type_t *type, size_t n_args,
-        const mp_obj_t *pos_args, mp_map_t *kw_args) {
+    size_t n_kw, const mp_obj_t *all_args) {
 
     enum { ARG_clock, ARG_data, ARG_latch };
     static const mp_arg_t allowed_args[] = {
@@ -60,17 +59,17 @@ STATIC mp_obj_t gamepadshift_make_new(const mp_obj_type_t *type, size_t n_args,
         { MP_QSTR_latch, MP_ARG_REQUIRED | MP_ARG_OBJ},
     };
     mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
-    mp_arg_parse_all(n_args, pos_args, kw_args, MP_ARRAY_SIZE(allowed_args),
-                     allowed_args, args);
+    mp_arg_parse_all_kw_array(n_args, n_kw, all_args, MP_ARRAY_SIZE(allowed_args),
+        allowed_args, args);
 
     digitalio_digitalinout_obj_t *clock_pin = assert_digitalinout(args[ARG_clock].u_obj);
     digitalio_digitalinout_obj_t *data_pin = assert_digitalinout(args[ARG_data].u_obj);
     digitalio_digitalinout_obj_t *latch_pin = assert_digitalinout(args[ARG_latch].u_obj);
 
-    gamepadshift_obj_t* gamepad_singleton = MP_STATE_VM(gamepad_singleton);
+    gamepadshift_obj_t *gamepad_singleton = MP_STATE_VM(gamepad_singleton);
     if (!gamepad_singleton ||
-        !MP_OBJ_IS_TYPE(MP_OBJ_FROM_PTR(gamepad_singleton),
-                        &gamepadshift_type)) {
+        !mp_obj_is_type(MP_OBJ_FROM_PTR(gamepad_singleton),
+            &gamepadshift_type)) {
         gamepad_singleton = m_new_ll_obj(gamepadshift_obj_t);
         gamepad_singleton->base.type = &gamepadshift_type;
         if (!MP_STATE_VM(gamepad_singleton)) {
@@ -82,7 +81,7 @@ STATIC mp_obj_t gamepadshift_make_new(const mp_obj_type_t *type, size_t n_args,
     return MP_OBJ_FROM_PTR(gamepad_singleton);
 }
 
-//|     def get_pressed(self, ) -> Any:
+//|     def get_pressed(self) -> int:
 //|         """Get the status of buttons pressed since the last call and clear it.
 //|
 //|         Returns an 8-bit number, with bits that correspond to buttons,
@@ -93,14 +92,14 @@ STATIC mp_obj_t gamepadshift_make_new(const mp_obj_type_t *type, size_t n_args,
 //|         ...
 //|
 STATIC mp_obj_t gamepadshift_get_pressed(mp_obj_t self_in) {
-    gamepadshift_obj_t* gamepad_singleton = MP_STATE_VM(gamepad_singleton);
+    gamepadshift_obj_t *gamepad_singleton = MP_STATE_VM(gamepad_singleton);
     mp_obj_t pressed = MP_OBJ_NEW_SMALL_INT(gamepad_singleton->pressed);
     gamepad_singleton->pressed = gamepad_singleton->last;
     return pressed;
 }
 MP_DEFINE_CONST_FUN_OBJ_1(gamepadshift_get_pressed_obj, gamepadshift_get_pressed);
 
-//|     def deinit(self, ) -> Any:
+//|     def deinit(self) -> None:
 //|         """Disable button scanning."""
 //|         ...
 //|
@@ -120,5 +119,5 @@ const mp_obj_type_t gamepadshift_type = {
     { &mp_type_type },
     .name = MP_QSTR_GamePadShift,
     .make_new = gamepadshift_make_new,
-    .locals_dict = (mp_obj_dict_t*)&gamepadshift_locals_dict,
+    .locals_dict = (mp_obj_dict_t *)&gamepadshift_locals_dict,
 };

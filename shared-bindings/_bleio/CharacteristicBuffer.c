@@ -37,14 +37,14 @@
 
 STATIC void raise_error_if_not_connected(bleio_characteristic_buffer_obj_t *self) {
     if (!common_hal_bleio_characteristic_buffer_connected(self)) {
-        mp_raise_bleio_ConnectionError(translate("Not connected"));
+        mp_raise_ConnectionError(translate("Not connected"));
     }
 }
 
 //| class CharacteristicBuffer:
 //|     """Accumulates a Characteristic's incoming values in a FIFO buffer."""
 //|
-//|     def __init__(self, characteristic: Characteristic, *, timeout: int = 1, buffer_size: int = 64):
+//|     def __init__(self, characteristic: Characteristic, *, timeout: int = 1, buffer_size: int = 64) -> None:
 //|
 //|         """Monitor the given Characteristic. Each time a new value is written to the Characteristic
 //|         add the newly-written bytes to a FIFO buffer.
@@ -57,7 +57,7 @@ STATIC void raise_error_if_not_connected(bleio_characteristic_buffer_obj_t *self
 //|           Must be >= 1."""
 //|         ...
 //|
-STATIC mp_obj_t bleio_characteristic_buffer_make_new(const mp_obj_type_t *type, size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
+STATIC mp_obj_t bleio_characteristic_buffer_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *all_args) {
     enum { ARG_characteristic, ARG_timeout, ARG_buffer_size, };
     static const mp_arg_t allowed_args[] = {
         { MP_QSTR_characteristic,  MP_ARG_REQUIRED | MP_ARG_OBJ },
@@ -66,9 +66,9 @@ STATIC mp_obj_t bleio_characteristic_buffer_make_new(const mp_obj_type_t *type, 
     };
 
     mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
-    mp_arg_parse_all(n_args, pos_args, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
+    mp_arg_parse_all_kw_array(n_args, n_kw, all_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
 
-    const mp_obj_t characteristic = args[ARG_characteristic].u_obj;
+    bleio_characteristic_obj_t *characteristic = mp_arg_validate_type(args[ARG_characteristic].u_obj, &bleio_characteristic_type, MP_QSTR_characteristic);
 
     mp_float_t timeout = mp_obj_get_float(args[ARG_timeout].u_obj);
     if (timeout < 0.0f) {
@@ -80,14 +80,10 @@ STATIC mp_obj_t bleio_characteristic_buffer_make_new(const mp_obj_type_t *type, 
         mp_raise_ValueError_varg(translate("%q must be >= 1"), MP_QSTR_buffer_size);
     }
 
-    if (!MP_OBJ_IS_TYPE(characteristic, &bleio_characteristic_type)) {
-        mp_raise_TypeError(translate("Expected a Characteristic"));
-    }
-
     bleio_characteristic_buffer_obj_t *self = m_new_obj(bleio_characteristic_buffer_obj_t);
     self->base.type = &bleio_characteristic_buffer_type;
 
-    common_hal_bleio_characteristic_buffer_construct(self, MP_OBJ_TO_PTR(characteristic), timeout, buffer_size);
+    common_hal_bleio_characteristic_buffer_construct(self, characteristic, timeout, buffer_size);
 
     return MP_OBJ_FROM_PTR(self);
 }
@@ -100,7 +96,7 @@ STATIC void check_for_deinit(bleio_characteristic_buffer_obj_t *self) {
 
 // These are standard stream methods. Code is in py/stream.c.
 //
-//|     def read(self, nbytes: Any = None) -> Any:
+//|     def read(self, nbytes: Optional[int] = None) -> Optional[bytes]:
 //|         """Read characters.  If ``nbytes`` is specified then read at most that many
 //|         bytes. Otherwise, read everything that arrives until the connection
 //|         times out. Providing the number of bytes expected is highly recommended
@@ -110,14 +106,14 @@ STATIC void check_for_deinit(bleio_characteristic_buffer_obj_t *self) {
 //|         :rtype: bytes or None"""
 //|         ...
 //|
-//|     def readinto(self, buf: Any) -> Any:
+//|     def readinto(self, buf: WriteableBuffer) -> Optional[int]:
 //|         """Read bytes into the ``buf``. Read at most ``len(buf)`` bytes.
 //|
 //|         :return: number of bytes read and stored into ``buf``
 //|         :rtype: int or None (on a non-blocking error)"""
 //|         ...
 //|
-//|     def readline(self, ) -> Any:
+//|     def readline(self) -> bytes:
 //|         """Read a line, ending in a newline character.
 //|
 //|         :return: the line read
@@ -167,7 +163,7 @@ STATIC mp_uint_t bleio_characteristic_buffer_ioctl(mp_obj_t self_in, mp_uint_t r
     return ret;
 }
 
-//|     in_waiting: Any = ...
+//|     in_waiting: int
 //|     """The number of bytes in the input buffer, available to be read"""
 //|
 STATIC mp_obj_t bleio_characteristic_buffer_obj_get_in_waiting(mp_obj_t self_in) {
@@ -180,11 +176,11 @@ MP_DEFINE_CONST_FUN_OBJ_1(bleio_characteristic_buffer_get_in_waiting_obj, bleio_
 const mp_obj_property_t bleio_characteristic_buffer_in_waiting_obj = {
     .base.type = &mp_type_property,
     .proxy = {(mp_obj_t)&bleio_characteristic_buffer_get_in_waiting_obj,
-              (mp_obj_t)&mp_const_none_obj,
-              (mp_obj_t)&mp_const_none_obj},
+              MP_ROM_NONE,
+              MP_ROM_NONE},
 };
 
-//|     def reset_input_buffer(self, ) -> Any:
+//|     def reset_input_buffer(self) -> None:
 //|         """Discard any unread characters in the input buffer."""
 //|         ...
 //|
@@ -196,7 +192,7 @@ STATIC mp_obj_t bleio_characteristic_buffer_obj_reset_input_buffer(mp_obj_t self
 }
 STATIC MP_DEFINE_CONST_FUN_OBJ_1(bleio_characteristic_buffer_reset_input_buffer_obj, bleio_characteristic_buffer_obj_reset_input_buffer);
 
-//|     def deinit(self, ) -> Any:
+//|     def deinit(self) -> None:
 //|         """Disable permanently."""
 //|         ...
 //|
@@ -231,17 +227,20 @@ STATIC const mp_stream_p_t characteristic_buffer_stream_p = {
     .write = bleio_characteristic_buffer_write,
     .ioctl = bleio_characteristic_buffer_ioctl,
     .is_text = false,
-    // Match PySerial when possible, such as disallowing optional length argument for .readinto()
-    .pyserial_compatibility = true,
+    // Disallow readinto() size parameter.
+    .pyserial_readinto_compatibility = true,
 };
 
 
 const mp_obj_type_t bleio_characteristic_buffer_type = {
     { &mp_type_type },
+    .flags = MP_TYPE_FLAG_EXTENDED,
     .name = MP_QSTR_CharacteristicBuffer,
     .make_new = bleio_characteristic_buffer_make_new,
-    .getiter = mp_identity_getiter,
-    .iternext = mp_stream_unbuffered_iter,
-    .protocol = &characteristic_buffer_stream_p,
-    .locals_dict = (mp_obj_dict_t*)&bleio_characteristic_buffer_locals_dict
+    .locals_dict = (mp_obj_dict_t *)&bleio_characteristic_buffer_locals_dict,
+    MP_TYPE_EXTENDED_FIELDS(
+        .getiter = mp_identity_getiter,
+        .iternext = mp_stream_unbuffered_iter,
+        .protocol = &characteristic_buffer_stream_p,
+        ),
 };

@@ -55,5 +55,7 @@ STATIC MP_DEFINE_CONST_DICT(audiopwmio_module_globals, audiopwmio_module_globals
 
 const mp_obj_module_t audiopwmio_module = {
     .base = { &mp_type_module },
-    .globals = (mp_obj_dict_t*)&audiopwmio_module_globals,
+    .globals = (mp_obj_dict_t *)&audiopwmio_module_globals,
 };
+
+MP_REGISTER_MODULE(MP_QSTR_audiopwmio, audiopwmio_module, CIRCUITPY_AUDIOPWMIO);

@@ -50,9 +50,9 @@
 //| For example::
 //|
 //|   import digitalio
-//|   from board import *
+//|   import board
 //|
-//|   pin = digitalio.DigitalInOut(D13)
+//|   pin = digitalio.DigitalInOut(board.LED)
 //|   print(pin.value)
 //|
 //| This example will initialize the the device, read
@@ -61,11 +61,11 @@
 //|
 //| Here is blinky::
 //|
-//|   import digitalio
-//|   from board import *
 //|   import time
+//|   import digitalio
+//|   import board
 //|
-//|   led = digitalio.DigitalInOut(D13)
+//|   led = digitalio.DigitalInOut(board.LED)
 //|   led.direction = digitalio.Direction.OUTPUT
 //|   while True:
 //|       led.value = True
@@ -88,5 +88,7 @@ STATIC MP_DEFINE_CONST_DICT(digitalio_module_globals, digitalio_module_globals_t
 
 const mp_obj_module_t digitalio_module = {
     .base = { &mp_type_module },
-    .globals = (mp_obj_dict_t*)&digitalio_module_globals,
+    .globals = (mp_obj_dict_t *)&digitalio_module_globals,
 };
+
+MP_REGISTER_MODULE(MP_QSTR_digitalio, digitalio_module, CIRCUITPY_DIGITALIO);

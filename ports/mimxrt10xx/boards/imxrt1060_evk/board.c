@@ -25,14 +25,15 @@
  * THE SOFTWARE.
  */
 
-#include "boards/board.h"
+#include "supervisor/board.h"
+#include "boards/flash_config.h"
 #include "mpconfigboard.h"
 #include "shared-bindings/microcontroller/Pin.h"
 
 void board_init(void) {
     // SWD Pins
-    common_hal_never_reset_pin(&pin_GPIO_AD_B0_06);//SWDIO
-    common_hal_never_reset_pin(&pin_GPIO_AD_B0_07);//SWCLK
+    common_hal_never_reset_pin(&pin_GPIO_AD_B0_06);// SWDIO
+    common_hal_never_reset_pin(&pin_GPIO_AD_B0_07);// SWCLK
 
     // FLEX flash
     common_hal_never_reset_pin(&pin_GPIO_SD_B1_00);
@@ -58,4 +59,7 @@ bool board_requests_safe_mode(void) {
 }
 
 void reset_board(void) {
+}
+
+void board_deinit(void) {
 }

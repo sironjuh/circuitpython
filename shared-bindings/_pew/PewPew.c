@@ -31,7 +31,7 @@
 #include "shared-bindings/digitalio/DigitalInOut.h"
 #include "shared-bindings/util.h"
 #include "PewPew.h"
-#include "shared-module/_pew/PewPew.h"
+#include "common-hal/_pew/PewPew.h"
 #include "supervisor/shared/translate.h"
 
 //| class PewPew:
@@ -45,8 +45,13 @@
 //|         used internally by it. All user-visible interactions are done through
 //|         that library."""
 //|
-
-//|     def __init__(self, buffer: Any, rows: Any, cols: Any, buttons: Any):
+//|     def __init__(
+//|         self,
+//|         buffer: ReadableBuffer,
+//|         rows: List[digitalio.DigitalInOut],
+//|         cols: List[digitalio.DigitalInOut],
+//|         buttons: digitalio.DigitalInOut,
+//|     ) -> None:
 //|         """Initializes matrix scanning routines.
 //|
 //|         The ``buffer`` is a 64 byte long ``bytearray`` that stores what should
@@ -57,9 +62,7 @@
 //|         buttons are connected to rows of the matrix)."""
 //|         ...
 //|
-STATIC mp_obj_t pewpew_make_new(const mp_obj_type_t *type, size_t n_args,
-        const mp_obj_t *pos_args, mp_map_t *kw_args) {
-    mp_arg_check_num(n_args, kw_args, 4, 4, true);
+STATIC mp_obj_t pewpew_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *all_args) {
     enum { ARG_buffer, ARG_rows, ARG_cols, ARG_buttons };
     static const mp_arg_t allowed_args[] = {
         { MP_QSTR_buffer, MP_ARG_OBJ | MP_ARG_REQUIRED },
@@ -68,8 +71,8 @@ STATIC mp_obj_t pewpew_make_new(const mp_obj_type_t *type, size_t n_args,
         { MP_QSTR_buttons, MP_ARG_OBJ | MP_ARG_REQUIRED },
     };
     mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
-    mp_arg_parse_all(n_args, pos_args, kw_args, MP_ARRAY_SIZE(allowed_args),
-                     allowed_args, args);
+    mp_arg_parse_all_kw_array(n_args, n_kw, all_args, MP_ARRAY_SIZE(allowed_args),
+        allowed_args, args);
 
     mp_buffer_info_t bufinfo;
     mp_get_buffer_raise(args[ARG_buffer].u_obj, &bufinfo, MP_BUFFER_READ);
@@ -87,31 +90,20 @@ STATIC mp_obj_t pewpew_make_new(const mp_obj_type_t *type, size_t n_args,
     }
 
     for (size_t i = 0; i < rows_size; ++i) {
-        if (!MP_OBJ_IS_TYPE(rows[i], &digitalio_digitalinout_type)) {
-            mp_raise_TypeError(translate("Row entry must be digitalio.DigitalInOut"));
-        }
-        digitalio_digitalinout_obj_t *pin = MP_OBJ_TO_PTR(rows[i]);
+        digitalio_digitalinout_obj_t *pin = mp_arg_validate_type(rows[i], &digitalio_digitalinout_type, MP_QSTR_rows);
         if (common_hal_digitalio_digitalinout_deinited(pin)) {
             raise_deinited_error();
         }
     }
 
     for (size_t i = 0; i < cols_size; ++i) {
-        if (!MP_OBJ_IS_TYPE(cols[i], &digitalio_digitalinout_type)) {
-            mp_raise_TypeError(translate("Column entry must be digitalio.DigitalInOut"));
-        }
-        digitalio_digitalinout_obj_t *pin = MP_OBJ_TO_PTR(cols[i]);
+        digitalio_digitalinout_obj_t *pin = mp_arg_validate_type(cols[i], &digitalio_digitalinout_type, MP_QSTR_cols);
         if (common_hal_digitalio_digitalinout_deinited(pin)) {
             raise_deinited_error();
         }
     }
 
-    if (!MP_OBJ_IS_TYPE(args[ARG_buttons].u_obj,
-                        &digitalio_digitalinout_type)) {
-        mp_raise_TypeError(translate("buttons must be digitalio.DigitalInOut"));
-    }
-    digitalio_digitalinout_obj_t *buttons = MP_OBJ_TO_PTR(
-            args[ARG_buttons].u_obj);
+    digitalio_digitalinout_obj_t *buttons = mp_arg_validate_type(args[ARG_buttons].u_obj, &digitalio_digitalinout_type, MP_QSTR_buttons);
     if (common_hal_digitalio_digitalinout_deinited(buttons)) {
         raise_deinited_error();
     }
@@ -144,5 +136,5 @@ const mp_obj_type_t pewpew_type = {
     { &mp_type_type },
     .name = MP_QSTR_PewPew,
     .make_new = pewpew_make_new,
-    .locals_dict = (mp_obj_dict_t*)&pewpew_locals_dict,
+    .locals_dict = (mp_obj_dict_t *)&pewpew_locals_dict,
 };

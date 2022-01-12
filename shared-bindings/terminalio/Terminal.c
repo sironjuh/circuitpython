@@ -40,39 +40,35 @@
 //| class Terminal:
 //|     """Display a character stream with a TileGrid"""
 //|
-//|     def __init__(self, tilegrid: Any, font: Any):
+//|     def __init__(self, tilegrid: displayio.TileGrid, font: fontio.BuiltinFont) -> None:
 //|         """Terminal manages tile indices and cursor position based on VT100 commands. The font should be
 //|         a `fontio.BuiltinFont` and the TileGrid's bitmap should match the font's bitmap."""
 //|         ...
 //|
 
-STATIC mp_obj_t terminalio_terminal_make_new(const mp_obj_type_t *type, size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
+STATIC mp_obj_t terminalio_terminal_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *all_args) {
     enum { ARG_tilegrid, ARG_font };
     static const mp_arg_t allowed_args[] = {
         { MP_QSTR_tilegrid, MP_ARG_REQUIRED | MP_ARG_OBJ },
         { MP_QSTR_font, MP_ARG_REQUIRED | MP_ARG_OBJ },
     };
     mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
-    mp_arg_parse_all(n_args, pos_args, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
+    mp_arg_parse_all_kw_array(n_args, n_kw, all_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
 
-    mp_obj_t tilegrid = args[ARG_tilegrid].u_obj;
-    if (!MP_OBJ_IS_TYPE(tilegrid, &displayio_tilegrid_type)) {
-        mp_raise_TypeError_varg(translate("Expected a %q"), displayio_tilegrid_type.name);
-    }
+    displayio_tilegrid_t *tilegrid = mp_arg_validate_type(args[ARG_tilegrid].u_obj, &displayio_tilegrid_type, MP_QSTR_tilegrid);
 
-    mp_obj_t font = args[ARG_font].u_obj;
-    if (!MP_OBJ_IS_TYPE(font, &fontio_builtinfont_type)) {
-        mp_raise_TypeError_varg(translate("Expected a %q"), fontio_builtinfont_type.name);
-    }
+    fontio_builtinfont_t *font = mp_arg_validate_type(args[ARG_font].u_obj, &fontio_builtinfont_type, MP_QSTR_font);
+
     terminalio_terminal_obj_t *self = m_new_obj(terminalio_terminal_obj_t);
     self->base.type = &terminalio_terminal_type;
-    common_hal_terminalio_terminal_construct(self, MP_OBJ_TO_PTR(tilegrid), MP_OBJ_TO_PTR(font));
+
+    common_hal_terminalio_terminal_construct(self, tilegrid, font);
     return MP_OBJ_FROM_PTR(self);
 }
 
 // These are standard stream methods. Code is in py/stream.c.
 //
-//|     def write(self, buf: Any) -> Any:
+//|     def write(self, buf: ReadableBuffer) -> Optional[int]:
 //|         """Write the buffer of bytes to the bus.
 //|
 //|         :return: the number of bytes written
@@ -118,10 +114,13 @@ STATIC const mp_stream_p_t terminalio_terminal_stream_p = {
 
 const mp_obj_type_t terminalio_terminal_type = {
     { &mp_type_type },
+    .flags = MP_TYPE_FLAG_EXTENDED,
     .name = MP_QSTR_Terminal,
     .make_new = terminalio_terminal_make_new,
-    .getiter = mp_identity_getiter,
-    .iternext = mp_stream_unbuffered_iter,
-    .protocol = &terminalio_terminal_stream_p,
-    .locals_dict = (mp_obj_dict_t*)&terminalio_terminal_locals_dict,
+    .locals_dict = (mp_obj_dict_t *)&terminalio_terminal_locals_dict,
+    MP_TYPE_EXTENDED_FIELDS(
+        .getiter = mp_identity_getiter,
+        .iternext = mp_stream_unbuffered_iter,
+        .protocol = &terminalio_terminal_stream_p,
+        ),
 };

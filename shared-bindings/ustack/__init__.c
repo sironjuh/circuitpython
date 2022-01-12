@@ -60,7 +60,7 @@ STATIC mp_obj_t stack_size(void) {
 }
 STATIC MP_DEFINE_CONST_FUN_OBJ_0(stack_size_obj, stack_size);
 
-//| def stack_usage() -> Any:
+//| def stack_usage() -> int:
 //|     """Return how much stack is currently in use.
 //|     Same as micropython.stack_use(); duplicated here for convenience."""
 //|     ...
@@ -83,5 +83,7 @@ STATIC MP_DEFINE_CONST_DICT(ustack_module_globals, ustack_module_globals_table);
 
 const mp_obj_module_t ustack_module = {
     .base = { &mp_type_module },
-    .globals = (mp_obj_dict_t*)&ustack_module_globals,
+    .globals = (mp_obj_dict_t *)&ustack_module_globals,
 };
+
+MP_REGISTER_MODULE(MP_QSTR_ustack, ustack_module, CIRCUITPY_USTACK);

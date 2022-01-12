@@ -30,7 +30,6 @@
 #include "py/objproperty.h"
 #include "py/runtime.h"
 
-//| import typing
 //| class Clock:
 //|     """Identifies a clock on the microcontroller.
 //|
@@ -44,7 +43,7 @@ STATIC void samd_clock_print(const mp_print_t *print, mp_obj_t self_in, mp_print
     mp_printf(print, "%q.%q.%q", MP_QSTR_samd, MP_QSTR_clock, self->name);
 }
 
-//|     enabled: bool = ...
+//|     enabled: bool
 //|     """Is the clock enabled? (read-only)"""
 //|
 STATIC mp_obj_t samd_clock_get_enabled(mp_obj_t self_in) {
@@ -57,25 +56,26 @@ MP_DEFINE_CONST_FUN_OBJ_1(samd_clock_get_enabled_obj, samd_clock_get_enabled);
 const mp_obj_property_t samd_clock_enabled_obj = {
     .base.type = &mp_type_property,
     .proxy = {(mp_obj_t)&samd_clock_get_enabled_obj,
-              (mp_obj_t)&mp_const_none_obj,
-              (mp_obj_t)&mp_const_none_obj,
-    },
+              MP_ROM_NONE,
+              MP_ROM_NONE,},
 };
 
-//|     parent: typing.Union(Clock | None) = ...
+//|     parent: Union[Clock, None]
 //|     """Clock parent. (read-only)"""
 //|
 STATIC mp_obj_t samd_clock_get_parent(mp_obj_t self_in) {
     samd_clock_obj_t *self = MP_OBJ_TO_PTR(self_in);
     uint8_t p_type, p_index;
-    if (!clock_get_parent(self->type, self->index, &p_type, &p_index))
+    if (!clock_get_parent(self->type, self->index, &p_type, &p_index)) {
         return mp_const_none;
+    }
 
-    const mp_map_t* samd_map = &samd_clock_globals.map;
+    const mp_map_t *samd_map = &samd_clock_globals.map;
     for (uint8_t i = 0; i < samd_map->alloc; i++) {
         samd_clock_obj_t *iter = samd_map->table[i].value;
-        if (iter->type == p_type && iter->index == p_index)
+        if (iter->type == p_type && iter->index == p_index) {
             return iter;
+        }
     }
     return mp_const_none;
 }
@@ -85,12 +85,11 @@ MP_DEFINE_CONST_FUN_OBJ_1(samd_clock_get_parent_obj, samd_clock_get_parent);
 const mp_obj_property_t samd_clock_parent_obj = {
     .base.type = &mp_type_property,
     .proxy = {(mp_obj_t)&samd_clock_get_parent_obj,
-              (mp_obj_t)&mp_const_none_obj,
-              (mp_obj_t)&mp_const_none_obj,
-    },
+              MP_ROM_NONE,
+              MP_ROM_NONE,},
 };
 
-//|     frequency: int = ...
+//|     frequency: int
 //|     """Clock frequency in Herz. (read-only)"""
 //|
 STATIC mp_obj_t samd_clock_get_frequency(mp_obj_t self_in) {
@@ -103,12 +102,11 @@ MP_DEFINE_CONST_FUN_OBJ_1(samd_clock_get_frequency_obj, samd_clock_get_frequency
 const mp_obj_property_t samd_clock_frequency_obj = {
     .base.type = &mp_type_property,
     .proxy = {(mp_obj_t)&samd_clock_get_frequency_obj,
-              (mp_obj_t)&mp_const_none_obj,
-              (mp_obj_t)&mp_const_none_obj,
-    },
+              MP_ROM_NONE,
+              MP_ROM_NONE,},
 };
 
-//|     calibration: int = ...
+//|     calibration: int
 //|     """Clock calibration. Not all clocks can be calibrated."""
 //|
 STATIC mp_obj_t samd_clock_get_calibration(mp_obj_t self_in) {
@@ -121,10 +119,12 @@ MP_DEFINE_CONST_FUN_OBJ_1(samd_clock_get_calibration_obj, samd_clock_get_calibra
 STATIC mp_obj_t samd_clock_set_calibration(mp_obj_t self_in, mp_obj_t calibration) {
     samd_clock_obj_t *self = MP_OBJ_TO_PTR(self_in);
     int ret = clock_set_calibration(self->type, self->index, mp_obj_get_int(calibration));
-    if (ret == -2)
+    if (ret == -2) {
         mp_raise_AttributeError(translate("calibration is read only"));
-    if (ret == -1)
+    }
+    if (ret == -1) {
         mp_raise_ValueError(translate("calibration is out of range"));
+    }
     return mp_const_none;
 }
 
@@ -134,8 +134,7 @@ const mp_obj_property_t samd_clock_calibration_obj = {
     .base.type = &mp_type_property,
     .proxy = {(mp_obj_t)&samd_clock_get_calibration_obj,
               (mp_obj_t)&samd_clock_set_calibration_obj,
-              (mp_obj_t)&mp_const_none_obj,
-    },
+              MP_ROM_NONE,},
 };
 
 STATIC const mp_rom_map_elem_t samd_clock_locals_dict_table[] = {
@@ -213,15 +212,15 @@ CLOCK(SYSTICK, 2, 0);
 #endif
 
 STATIC const mp_rom_map_elem_t samd_clock_global_dict_table[] = {
-#ifdef SAMD21_EXPOSE_ALL_CLOCKS
+    #ifdef SAMD21_EXPOSE_ALL_CLOCKS
     CLOCK_ENTRY(XOSC),
     CLOCK_ENTRY(GCLKIN),
     CLOCK_ENTRY(GCLKGEN1),
     CLOCK_ENTRY(OSCULP32K),
-#endif
+    #endif
     CLOCK_ENTRY(OSC32K),
     CLOCK_ENTRY(XOSC32K),
-#ifdef SAMD21_EXPOSE_ALL_CLOCKS
+    #ifdef SAMD21_EXPOSE_ALL_CLOCKS
     CLOCK_ENTRY(OSC8M),
     CLOCK_ENTRY(DFLL48M),
     CLOCK_ENTRY(DPLL96M),
@@ -229,9 +228,9 @@ STATIC const mp_rom_map_elem_t samd_clock_global_dict_table[] = {
     CLOCK_ENTRY_(SYSCTRL, FDPLL),
     CLOCK_ENTRY_(SYSCTRL, FDPLL32K),
     CLOCK_ENTRY(WDT),
-#endif
+    #endif
     CLOCK_ENTRY(RTC),
-#ifdef SAMD21_EXPOSE_ALL_CLOCKS
+    #ifdef SAMD21_EXPOSE_ALL_CLOCKS
     CLOCK_ENTRY(EIC),
     CLOCK_ENTRY(USB),
     CLOCK_ENTRY_(EVSYS, 0),
@@ -266,13 +265,13 @@ STATIC const mp_rom_map_elem_t samd_clock_global_dict_table[] = {
     CLOCK_ENTRY_(I2S, 1),
 
     CLOCK_ENTRY(SYSTICK),
-#endif
+    #endif
 };
 MP_DEFINE_CONST_DICT(samd_clock_globals, samd_clock_global_dict_table);
 
 #endif // SAMD21
 
-#ifdef SAMD51
+#ifdef SAM_D5X_E5X
 
 
 

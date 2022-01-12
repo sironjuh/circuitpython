@@ -1,59 +1,67 @@
 
 #include <stdint.h>
 
-#include "lib/utils/context_manager_helpers.h"
+#include "shared/runtime/context_manager_helpers.h"
 #include "py/objproperty.h"
 #include "py/runtime.h"
 #include "py/runtime0.h"
 #include "shared-bindings/microcontroller/Pin.h"
 #include "shared-bindings/countio/Counter.h"
+#include "shared-bindings/countio/Edge.h"
 #include "shared-bindings/util.h"
 
 //| class Counter:
-//|     """Counter will keep track of the number of falling edge transistions (pulses) on a
-//|        given pin"""
+//|     """Count the number of rising- and/or falling-edge transitions on a given pin.
+//|     """
 //|
-//|     def __init__(self, pin_a):
-//|         """Create a Counter object associated with the given pin. It tracks the number of
-//|            falling pulses relative when the object is constructed.
+//|     def __init__(self, pin: microcontroller.Pin, *, edge: Edge = Edge.FALL, pull: Optional[digitalio.Pull]) -> None:
+//|         """Create a Counter object associated with the given pin that counts
+//|         rising- and/or falling-edge transitions. At least one of ``rise`` and ``fall`` must be True.
+//|         The default is to count only falling edges, and is for historical backward compatibility.
 //|
-//|            :param ~microcontroller.Pin pin_a: Pin to read pulses from.
+//|         :param ~microcontroller.Pin pin: pin to monitor
+//|         :param Edge: which edge transitions to count
+//|         :param digitalio.Pull: enable a pull-up or pull-down if not None
 //|
 //|
-//|            For example::
+//|         For example::
 //|
-//|                import countio
-//|                import time
-//|                from board import *
+//|             import board
+//|             import countio
 //|
-//|                pin_counter = countio.Counter(board.D1)
-//|                #reset the count after 100 counts
-//|                while True:
-//|                    if pin_counter.count == 100:
-//|                        pin_counter.reset()
-//|                    print(pin_counter.count)"""
+//|             # Count rising edges only.
+//|             pin_counter = countio.Counter(board.D1, edge=Edge.RISE)
+//|             # Reset the count after 100 counts.
+//|             while True:
+//|                 if pin_counter.count >= 100:
+//|                     pin_counter.reset()
+//|                 print(pin_counter.count)
+//|         """
+//|         ...
 //|
-STATIC mp_obj_t countio_counter_make_new(const mp_obj_type_t *type, size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
-    enum { ARG_pin_a };
+STATIC mp_obj_t countio_counter_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *all_args) {
+    enum { ARG_pin, ARG_edge, ARG_pull };
     static const mp_arg_t allowed_args[] = {
-        { MP_QSTR_pin_a, MP_ARG_REQUIRED | MP_ARG_OBJ }
-
+        { MP_QSTR_pin,  MP_ARG_REQUIRED | MP_ARG_OBJ },
+        { MP_QSTR_edge, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_obj = MP_OBJ_FROM_PTR(&edge_FALL_obj) } },
+        { MP_QSTR_pull, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_obj = mp_const_none} },
     };
     mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
-    mp_arg_parse_all(n_args, pos_args, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
+    mp_arg_parse_all_kw_array(n_args, n_kw, all_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
 
-    const mcu_pin_obj_t* pin_a = validate_obj_is_free_pin(args[ARG_pin_a].u_obj);
-
+    const mcu_pin_obj_t *pin = validate_obj_is_free_pin(args[ARG_pin].u_obj);
+    const countio_edge_t edge = validate_edge(args[ARG_edge].u_obj, MP_QSTR_edge);
+    const digitalio_pull_t pull = validate_pull(args[ARG_pull].u_obj, MP_QSTR_pull);
 
     countio_counter_obj_t *self = m_new_obj(countio_counter_obj_t);
     self->base.type = &countio_counter_type;
 
-    common_hal_countio_counter_construct(self, pin_a);
+    common_hal_countio_counter_construct(self, pin, edge, pull);
 
     return MP_OBJ_FROM_PTR(self);
 }
 
-//|     def deinit(self):
+//|     def deinit(self) -> None:
 //|         """Deinitializes the Counter and releases any hardware resources for reuse."""
 //|
 STATIC mp_obj_t countio_counter_deinit(mp_obj_t self_in) {
@@ -69,12 +77,12 @@ STATIC void check_for_deinit(countio_counter_obj_t *self) {
     }
 }
 
-//|     def __enter__(self):
+//|     def __enter__(self) -> Counter:
 //|         """No-op used by Context Managers."""
 //|
 //  Provided by context manager helper.
 
-//|     def __exit__(self):
+//|     def __exit__(self) -> None:
 //|         """Automatically deinitializes the hardware when exiting a context. See
 //|            :ref:`lifetime-and-contextmanagers` for more info."""
 //|
@@ -86,7 +94,7 @@ STATIC mp_obj_t countio_counter_obj___exit__(size_t n_args, const mp_obj_t *args
 STATIC MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(countio_counter___exit___obj, 4, 4, countio_counter_obj___exit__);
 
 
-//|     count: int = ...
+//|     count: int
 //|     """The current count in terms of pulses."""
 //|
 STATIC mp_obj_t countio_counter_obj_get_count(mp_obj_t self_in) {
@@ -110,18 +118,17 @@ const mp_obj_property_t countio_counter_count_obj = {
     .base.type = &mp_type_property,
     .proxy = {(mp_obj_t)&countio_counter_get_count_obj,
               (mp_obj_t)&countio_counter_set_count_obj,
-              (mp_obj_t)&mp_const_none_obj},
+              MP_ROM_NONE},
 };
 
-//|     def reset(self):
+//|     def reset(self) -> None:
 //|         """Resets the count back to 0."""
 //|
-STATIC mp_obj_t countio_counter_reset(mp_obj_t self_in){
-	countio_counter_obj_t *self = MP_OBJ_TO_PTR(self_in);
-	check_for_deinit(self);
-	//set the position to zero for reset
-	common_hal_countio_counter_reset(self);
-	return mp_const_none;
+STATIC mp_obj_t countio_counter_reset(mp_obj_t self_in) {
+    countio_counter_obj_t *self = MP_OBJ_TO_PTR(self_in);
+    check_for_deinit(self);
+    common_hal_countio_counter_set_count(self, 0);
+    return mp_const_none;
 }
 
 
@@ -141,5 +148,5 @@ const mp_obj_type_t countio_counter_type = {
     { &mp_type_type },
     .name = MP_QSTR_Counter,
     .make_new = countio_counter_make_new,
-    .locals_dict = (mp_obj_dict_t*)&countio_counter_locals_dict,
+    .locals_dict = (mp_obj_dict_t *)&countio_counter_locals_dict,
 };

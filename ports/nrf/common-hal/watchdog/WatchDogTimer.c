@@ -28,6 +28,7 @@
 #include <math.h>
 #include <string.h>
 
+#include "py/gc.h"
 #include "py/obj.h"
 #include "py/objproperty.h"
 #include "py/runtime.h"
@@ -61,12 +62,12 @@ STATIC void watchdogtimer_timer_event_handler(nrf_timer_event_t event_type, void
     nrfx_timer_pause(timer);
     self->mode = WATCHDOGMODE_NONE;
     mp_obj_exception_clear_traceback(MP_OBJ_FROM_PTR(&mp_watchdog_timeout_exception));
-    MP_STATE_VM(mp_pending_exception) = &mp_watchdog_timeout_exception;
-#if MICROPY_ENABLE_SCHEDULER
+    MP_STATE_THREAD(mp_pending_exception) = &mp_watchdog_timeout_exception;
+    #if MICROPY_ENABLE_SCHEDULER
     if (MP_STATE_VM(sched_state) == MP_SCHED_IDLE) {
         MP_STATE_VM(sched_state) = MP_SCHED_PENDING;
     }
-#endif
+    #endif
 }
 
 static void timer_free(void) {
@@ -93,6 +94,13 @@ void common_hal_watchdog_feed(watchdog_watchdogtimer_obj_t *self) {
 }
 
 void common_hal_watchdog_deinit(watchdog_watchdogtimer_obj_t *self) {
+    if (self->mode == WATCHDOGMODE_RESET) {
+        if (gc_alloc_possible()) {
+            mp_raise_NotImplementedError(translate("WatchDogTimer cannot be deinitialized once mode is set to RESET"));
+        }
+        // Don't change anything because RESET cannot be undone.
+        return;
+    }
     if (timer) {
         timer_free();
     }

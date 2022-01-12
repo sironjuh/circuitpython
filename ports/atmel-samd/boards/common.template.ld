@@ -27,8 +27,12 @@ SECTIONS
         . = ALIGN(4);
         _sfixed = .;
         KEEP(*(.vectors)) /* isr vector table */
-        *(.text)           /* .text sections (code) */
-        *(.text*)          /* .text* sections (code) */
+
+        /* Sort text sections so that they have fewer *fill* bytes needed. */
+        *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.text)))           /* .text sections (code) */
+        *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.text*)))          /* .text* sections (code) */
+
+        /* Don't sort rodata because it impacts codegen size. */
         *(.rodata)         /* .rodata sections (constants, strings, etc.) */
         *(.rodata*)        /* .rodata* sections (constants, strings, etc.) */
 
@@ -43,6 +47,15 @@ SECTIONS
         _sidata = .;       /* start of .data section */
     } >FLASH_FIRMWARE
 
+    /* Data accessed by the CAN peripheral must be in the first 64kB RAM */
+    /* place it at the very start of RAM, before the .data section */
+    /* it is zeroed by reset_port */
+    .canram (NOLOAD) :
+    {
+        . = ALIGN(4);
+        *(.canram)
+    } > RAM
+
     /* This is the initialized data section
     The program executes knowing that the data is in the RAM
     but the loader puts the initial values in the FLASH_FIRMWARE (inidata).
@@ -53,21 +66,21 @@ SECTIONS
         _srelocate = .;        /* create a global symbol at data start; used by startup code in order to initialize the .data section in RAM */
         *(.ramfunc)
         *(.ramfunc*)
-        *(.data)           /* .data sections */
-        *(.data*)          /* .data* sections */
+        *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.data)))           /* .data sections */
+        *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.data*)))          /* .data* sections */
 
         . = ALIGN(4);
         _erelocate = .;        /* define a global symbol at data end; used by startup code in order to initialize the .data section in RAM */
     } >RAM
 
     /* Uninitialized data section */
-    .bss :
+    .bss (NOLOAD) :
     {
         . = ALIGN(4);
         _sbss = .;
         _szero = .;         /* define a global symbol at bss start; used by startup code */
-        *(.bss)
-        *(.bss*)
+        *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.bss)))
+        *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.bss*)))
         *(COMMON)
 
         . = ALIGN(4);

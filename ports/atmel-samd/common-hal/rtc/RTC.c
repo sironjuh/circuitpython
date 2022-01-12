@@ -33,8 +33,9 @@
 
 #include "py/obj.h"
 #include "py/runtime.h"
-#include "lib/timeutils/timeutils.h"
+#include "shared/timeutils/timeutils.h"
 #include "shared-bindings/rtc/__init__.h"
+#include "shared-bindings/rtc/RTC.h"
 #include "supervisor/port.h"
 #include "supervisor/shared/translate.h"
 
@@ -51,7 +52,7 @@ void common_hal_rtc_set_time(timeutils_struct_time_t *tm) {
     uint64_t ticks_s = port_get_raw_ticks(NULL) / 1024;
     uint32_t epoch_s = timeutils_seconds_since_2000(
         tm->tm_year, tm->tm_mon, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec
-    );
+        );
     rtc_offset = epoch_s - ticks_s;
 }
 
@@ -68,7 +69,11 @@ int common_hal_rtc_get_calibration(void) {
 
 void common_hal_rtc_set_calibration(int calibration) {
     if (calibration > 127 || calibration < -127) {
+        #if CIRCUITPY_FULL_BUILD
         mp_raise_ValueError(translate("calibration value out of range +/-127"));
+        #else
+        mp_raise_ValueError(translate("calibration is out of range"));
+        #endif
     }
 
     hri_rtcmode0_write_FREQCORR_SIGN_bit(RTC, calibration < 0 ? 0 : 1);

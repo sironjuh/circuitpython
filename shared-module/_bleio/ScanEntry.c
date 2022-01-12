@@ -29,6 +29,7 @@
 #include <string.h>
 
 #include "shared-bindings/_bleio/Address.h"
+#include "shared-bindings/_bleio/ScanEntry.h"
 #include "shared-module/_bleio/Address.h"
 #include "shared-module/_bleio/ScanEntry.h"
 
@@ -52,15 +53,20 @@ bool common_hal_bleio_scanentry_get_scan_response(bleio_scanentry_obj_t *self) {
     return self->scan_response;
 }
 
-bool bleio_scanentry_data_matches(const uint8_t* data, size_t len, const uint8_t* prefixes, size_t prefixes_length, bool any) {
+bool bleio_scanentry_data_matches(const uint8_t *data, size_t len, const uint8_t *prefixes, size_t prefixes_length, bool any) {
     if (prefixes_length == 0) {
         return true;
     }
+    if (len == 0) {
+        // Prefixes exist, but no data.
+        return false;
+    }
     size_t i = 0;
-    while(i < prefixes_length) {
+    while (i < prefixes_length) {
         uint8_t prefix_length = prefixes[i];
         i += 1;
         size_t j = 0;
+        bool prefix_matched = false;
         while (j < len) {
             uint8_t structure_length = data[j];
             j += 1;
@@ -71,16 +77,21 @@ bool bleio_scanentry_data_matches(const uint8_t* data, size_t len, const uint8_t
                 if (any) {
                     return true;
                 }
-            } else if (!any) {
-                return false;
+                prefix_matched = true;
+                break;
             }
             j += structure_length;
         }
+        // If all (!any), the current prefix must have matched at least one field.
+        if (!prefix_matched && !any) {
+            return false;
+        }
         i += prefix_length;
     }
+    // All prefixes matched some field (if !any), or none did (if any).
     return !any;
 }
 
-bool common_hal_bleio_scanentry_matches(bleio_scanentry_obj_t *self, const uint8_t* prefixes, size_t prefixes_len, bool all) {
-    return bleio_scanentry_data_matches(self->data->data, self->data->len, prefixes, prefixes_len, !all);
+bool common_hal_bleio_scanentry_matches(bleio_scanentry_obj_t *self, const uint8_t *prefixes, size_t prefixes_len, bool match_all) {
+    return bleio_scanentry_data_matches(self->data->data, self->data->len, prefixes, prefixes_len, !match_all);
 }

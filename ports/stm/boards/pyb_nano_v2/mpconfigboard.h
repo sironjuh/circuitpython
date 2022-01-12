@@ -24,7 +24,7 @@
  * THE SOFTWARE.
  */
 
-//Micropython setup
+// Micropython setup
 
 #define MICROPY_HW_BOARD_NAME       "PYB LR Nano V2"
 #define MICROPY_HW_MCU_NAME         "STM32F411CE"
@@ -47,3 +47,5 @@
 #define BOARD_FLASH_SIZE (FLASH_SIZE - 0x2000 - 0xC000)
 
 #define AUTORESET_DELAY_MS (500)
+
+#define MICROPY_FATFS_EXFAT 0

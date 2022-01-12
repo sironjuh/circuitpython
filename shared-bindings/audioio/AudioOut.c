@@ -26,7 +26,7 @@
 
 #include <stdint.h>
 
-#include "lib/utils/context_manager_helpers.h"
+#include "shared/runtime/context_manager_helpers.h"
 #include "py/binary.h"
 #include "py/objproperty.h"
 #include "py/runtime.h"
@@ -39,7 +39,7 @@
 //| class AudioOut:
 //|     """Output an analog audio signal"""
 //|
-//|     def __init__(self, left_channel: microcontroller.Pin, *, right_channel: microcontroller.Pin = None, quiescent_value: int = 0x8000):
+//|     def __init__(self, left_channel: microcontroller.Pin, *, right_channel: Optional[microcontroller.Pin] = None, quiescent_value: int = 0x8000) -> None:
 //|         """Create a AudioOut object associated with the given pin(s). This allows you to
 //|         play audio signals out on the given pin(s).
 //|
@@ -90,7 +90,7 @@
 //|           print("stopped")"""
 //|         ...
 //|
-STATIC mp_obj_t audioio_audioout_make_new(const mp_obj_type_t *type, size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
+STATIC mp_obj_t audioio_audioout_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *all_args) {
     enum { ARG_left_channel, ARG_right_channel, ARG_quiescent_value };
     static const mp_arg_t allowed_args[] = {
         { MP_QSTR_left_channel, MP_ARG_OBJ | MP_ARG_REQUIRED },
@@ -98,7 +98,7 @@ STATIC mp_obj_t audioio_audioout_make_new(const mp_obj_type_t *type, size_t n_ar
         { MP_QSTR_quiescent_value, MP_ARG_INT | MP_ARG_KW_ONLY, {.u_int = 0x8000} },
     };
     mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
-    mp_arg_parse_all(n_args, pos_args, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
+    mp_arg_parse_all_kw_array(n_args, n_kw, all_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
 
     const mcu_pin_obj_t *left_channel_pin = validate_obj_is_free_pin(args[ARG_left_channel].u_obj);
     const mcu_pin_obj_t *right_channel_pin = validate_obj_is_free_pin_or_none(args[ARG_right_channel].u_obj);
@@ -111,7 +111,7 @@ STATIC mp_obj_t audioio_audioout_make_new(const mp_obj_type_t *type, size_t n_ar
     return MP_OBJ_FROM_PTR(self);
 }
 
-//|     def deinit(self, ) -> Any:
+//|     def deinit(self) -> None:
 //|         """Deinitialises the AudioOut and releases any hardware resources for reuse."""
 //|         ...
 //|
@@ -127,13 +127,13 @@ STATIC void check_for_deinit(audioio_audioout_obj_t *self) {
         raise_deinited_error();
     }
 }
-//|     def __enter__(self, ) -> Any:
+//|     def __enter__(self) -> AudioOut:
 //|         """No-op used by Context Managers."""
 //|         ...
 //|
 //  Provided by context manager helper.
 
-//|     def __exit__(self, ) -> Any:
+//|     def __exit__(self) -> None:
 //|         """Automatically deinitializes the hardware when exiting a context. See
 //|         :ref:`lifetime-and-contextmanagers` for more info."""
 //|         ...
@@ -146,11 +146,11 @@ STATIC mp_obj_t audioio_audioout_obj___exit__(size_t n_args, const mp_obj_t *arg
 STATIC MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(audioio_audioout___exit___obj, 4, 4, audioio_audioout_obj___exit__);
 
 
-//|     def play(self, sample: Any, *, loop: Any = False) -> Any:
+//|     def play(self, sample: circuitpython_typing.AudioSample, *, loop: bool = False) -> None:
 //|         """Plays the sample once when loop=False and continuously when loop=True.
 //|         Does not block. Use `playing` to block.
 //|
-//|         Sample must be an `audiocore.WaveFile`, `audiocore.RawSample`, or `audiomixer.Mixer`.
+//|         Sample must be an `audiocore.WaveFile`, `audiocore.RawSample`, `audiomixer.Mixer` or `audiomp3.MP3Decoder`.
 //|
 //|         The sample itself should consist of 16 bit samples. Microcontrollers with a lower output
 //|         resolution will use the highest order bits to output. For example, the SAMD21 has a 10 bit
@@ -175,7 +175,7 @@ STATIC mp_obj_t audioio_audioout_obj_play(size_t n_args, const mp_obj_t *pos_arg
 }
 MP_DEFINE_CONST_FUN_OBJ_KW(audioio_audioout_play_obj, 1, audioio_audioout_obj_play);
 
-//|     def stop(self, ) -> Any:
+//|     def stop(self) -> None:
 //|         """Stops playback and resets to the start of the sample."""
 //|         ...
 //|
@@ -187,7 +187,7 @@ STATIC mp_obj_t audioio_audioout_obj_stop(mp_obj_t self_in) {
 }
 MP_DEFINE_CONST_FUN_OBJ_1(audioio_audioout_stop_obj, audioio_audioout_obj_stop);
 
-//|     playing: Any = ...
+//|     playing: bool
 //|     """True when an audio sample is being output even if `paused`. (read-only)"""
 //|
 STATIC mp_obj_t audioio_audioout_obj_get_playing(mp_obj_t self_in) {
@@ -200,11 +200,11 @@ MP_DEFINE_CONST_FUN_OBJ_1(audioio_audioout_get_playing_obj, audioio_audioout_obj
 const mp_obj_property_t audioio_audioout_playing_obj = {
     .base.type = &mp_type_property,
     .proxy = {(mp_obj_t)&audioio_audioout_get_playing_obj,
-              (mp_obj_t)&mp_const_none_obj,
-              (mp_obj_t)&mp_const_none_obj},
+              MP_ROM_NONE,
+              MP_ROM_NONE},
 };
 
-//|     def pause(self, ) -> Any:
+//|     def pause(self) -> None:
 //|         """Stops playback temporarily while remembering the position. Use `resume` to resume playback."""
 //|         ...
 //|
@@ -220,7 +220,7 @@ STATIC mp_obj_t audioio_audioout_obj_pause(mp_obj_t self_in) {
 }
 MP_DEFINE_CONST_FUN_OBJ_1(audioio_audioout_pause_obj, audioio_audioout_obj_pause);
 
-//|     def resume(self, ) -> Any:
+//|     def resume(self) -> None:
 //|         """Resumes sample playback after :py:func:`pause`."""
 //|         ...
 //|
@@ -236,7 +236,7 @@ STATIC mp_obj_t audioio_audioout_obj_resume(mp_obj_t self_in) {
 }
 MP_DEFINE_CONST_FUN_OBJ_1(audioio_audioout_resume_obj, audioio_audioout_obj_resume);
 
-//|     paused: Any = ...
+//|     paused: bool
 //|     """True when playback is paused. (read-only)"""
 //|
 STATIC mp_obj_t audioio_audioout_obj_get_paused(mp_obj_t self_in) {
@@ -249,8 +249,8 @@ MP_DEFINE_CONST_FUN_OBJ_1(audioio_audioout_get_paused_obj, audioio_audioout_obj_
 const mp_obj_property_t audioio_audioout_paused_obj = {
     .base.type = &mp_type_property,
     .proxy = {(mp_obj_t)&audioio_audioout_get_paused_obj,
-              (mp_obj_t)&mp_const_none_obj,
-              (mp_obj_t)&mp_const_none_obj},
+              MP_ROM_NONE,
+              MP_ROM_NONE},
 };
 
 STATIC const mp_rom_map_elem_t audioio_audioout_locals_dict_table[] = {
@@ -273,5 +273,5 @@ const mp_obj_type_t audioio_audioout_type = {
     { &mp_type_type },
     .name = MP_QSTR_AudioOut,
     .make_new = audioio_audioout_make_new,
-    .locals_dict = (mp_obj_dict_t*)&audioio_audioout_locals_dict,
+    .locals_dict = (mp_obj_dict_t *)&audioio_audioout_locals_dict,
 };

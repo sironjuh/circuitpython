@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2014 MicroPython & CircuitPython contributors (https://github.com/adafruit/circuitpython/graphs/contributors)
+
+SPDX-License-Identifier: MIT
+-->
 
 # Building CircuitPython
 
@@ -22,6 +27,12 @@ This project has a bunch of git submodules.  You will need to update them regula
 
     git submodule sync
     git submodule update --init
+
+### Required Python Packages
+
+Failing to install these will prevent from properly building.
+
+    pip3 install -r requirements-dev.txt
 
 ### mpy-cross
 
@@ -80,3 +91,23 @@ Example:
 
 If your port/build includes `arm-none-eabi-gdb-py`, consider using it instead, as it can be used for better register
 debugging with https://github.com/bnahill/PyCortexMDebug
+
+# Code Quality Checks
+
+We apply code quality checks using pre-commit.  Install pre-commit once per system with
+
+    python3 -mpip install pre-commit
+
+Activate it once per git clone with
+
+    pre-commit install
+
+Pre-commit also requires some additional programs to be installed through your package manager:
+
+ * Standard Unix tools such as make, find, etc
+ * The gettext package, any modern version
+ * uncrustify version 0.71 (0.72 is also tested)
+
+Each time you create a git commit, the pre-commit quality checks will be run.  You can also run them e.g., with `pre-commit run foo.c` or `pre-commit run --all` to run on all files whether modified or not.
+
+Some pre-commit quality checks require your active attention to resolve, others (such as the formatting checks of uncrustify) are made automatically and must simply be incorporated into your code changes by committing them.

@@ -35,6 +35,7 @@
 #include "common-hal/audiobusio/PDMIn.h"
 #include "shared-bindings/analogio/AnalogOut.h"
 #include "shared-bindings/audiobusio/PDMIn.h"
+#include "shared-bindings/microcontroller/__init__.h"
 #include "shared-bindings/microcontroller/Pin.h"
 #include "supervisor/shared/translate.h"
 
@@ -60,11 +61,24 @@
 #define SERCTRL(name) I2S_SERCTRL_ ## name
 #endif
 
-#ifdef SAMD51
+#ifdef SAM_D5X_E5X
 #define SERCTRL(name) I2S_RXCTRL_ ## name
 #endif
 
+// Set by interrupt handler when DMA block has finished transferring.
+static bool pdmin_dma_block_done;
+// Event channel used to trigger interrupt. Set to invalid value EVSYS_SYNCH_NUM when not in use.
+static uint8_t pdmin_event_channel;
+
+void pdmin_evsys_handler(void) {
+    if (pdmin_event_channel < EVSYS_SYNCH_NUM && event_interrupt_active(pdmin_event_channel)) {
+        pdmin_dma_block_done = true;
+    }
+}
+
 void pdmin_reset(void) {
+    pdmin_event_channel = EVSYS_SYNCH_NUM;
+
     while (I2S->SYNCBUSY.reg & I2S_SYNCBUSY_ENABLE) {}
     I2S->INTENCLR.reg = I2S_INTENCLR_MASK;
     I2S->INTFLAG.reg = I2S_INTFLAG_MASK;
@@ -84,21 +98,21 @@ void common_hal_audiobusio_pdmin_construct(audiobusio_pdmin_obj_t* self,
     self->clock_pin = clock_pin; // PA10, PA20 -> SCK0, PB11 -> SCK1
     #ifdef SAMD21
         if (clock_pin == &pin_PA10
-        #ifdef PIN_PA20
+        #if defined(PIN_PA20) && !defined(IGNORE_PIN_PA20)
             || clock_pin == &pin_PA20
         #endif
             ) {
             self->clock_unit = 0;
-        #ifdef PIN_PB11
+        #if defined(PIN_PB11) && !defined(IGNORE_PIN_PB11)
         } else if (clock_pin == &pin_PB11) {
             self->clock_unit = 1;
         #endif
     #endif
-    #ifdef SAMD51
+    #ifdef SAM_D5X_E5X
         if (clock_pin == &pin_PA10 || clock_pin == &pin_PB16) {
             self->clock_unit = 0;
     } else if (clock_pin == &pin_PB12
-        #ifdef PIN_PB28
+        #if defined(PIN_PB28) && !defined(IGNORE_PIN_PB28)
         || data_pin == &pin_PB28) {
         #else
         ) {
@@ -112,17 +126,27 @@ void common_hal_audiobusio_pdmin_construct(audiobusio_pdmin_obj_t* self,
     self->data_pin = data_pin; // PA07, PA19 -> SD0, PA08, PB16 -> SD1
 
     #ifdef SAMD21
-    if (data_pin == &pin_PA07 || data_pin == &pin_PA19) {
-        self->serializer = 0;
-    } else if (data_pin == &pin_PA08
-        #ifdef PIN_PB16
-        || data_pin == &pin_PB16) {
-        #else
-        ) {
+    if (false
+        #if defined(PIN_PA07) && !defined(IGNORE_PIN_PA07)
+        || data_pin == &pin_PA07
         #endif
+        #if defined(PIN_PA19) && !defined(IGNORE_PIN_PA19)
+        || data_pin == &pin_PA19
+        #endif
+        ) {
+        self->serializer = 0;
+    }
+    else if (false
+        #if defined(PIN_PA08) && !defined(IGNORE_PIN_PA08)
+        || data_pin == &pin_PA08
+        #endif
+        #if defined (PIN_PB16) && !defined(IGNORE_PIN_PB16)
+        || data_pin == &pin_PB16
+       #endif
+        ) {
         self->serializer = 1;
     #endif
-    #ifdef SAMD51
+    #ifdef SAM_D5X_E5X
     if (data_pin == &pin_PB10 || data_pin == &pin_PA22) {
         self->serializer = 1;
     #endif
@@ -145,13 +169,13 @@ void common_hal_audiobusio_pdmin_construct(audiobusio_pdmin_obj_t* self,
             mp_raise_RuntimeError(translate("Serializer in use"));
         }
         #endif
-        #ifdef SAMD51
+        #ifdef SAM_D5X_E5X
         if (I2S->CTRLA.bit.RXEN == 1) {
             mp_raise_RuntimeError(translate("Serializer in use"));
         }
         #endif
     }
-    #ifdef SAMD51
+    #ifdef SAM_D5X_E5X
     #define GPIO_I2S_FUNCTION GPIO_PIN_FUNCTION_J
     #endif
     #ifdef SAMD21
@@ -185,7 +209,7 @@ void common_hal_audiobusio_pdmin_construct(audiobusio_pdmin_obj_t* self,
     #ifdef SAMD21
     uint32_t serctrl = (self->clock_unit << I2S_SERCTRL_CLKSEL_Pos) | SERCTRL(SERMODE_PDM2) | SERCTRL(DATASIZE_32);
     #endif
-    #ifdef SAMD51
+    #ifdef SAM_D5X_E5X
     uint32_t serctrl = (self->clock_unit << I2S_RXCTRL_CLKSEL_Pos) | SERCTRL(SERMODE_PDM2) | SERCTRL(DATASIZE_32);
     #endif
 
@@ -196,7 +220,7 @@ void common_hal_audiobusio_pdmin_construct(audiobusio_pdmin_obj_t* self,
     #ifdef SAMD21
     I2S->SERCTRL[self->serializer].reg = serctrl;
     #endif
-    #ifdef SAMD51
+    #ifdef SAM_D5X_E5X
     I2S->RXCTRL.reg = serctrl;
     #endif
 
@@ -274,7 +298,7 @@ static void setup_dma(audiobusio_pdmin_obj_t* self, uint32_t length,
     #ifdef SAMD21
     descriptor->SRCADDR.reg = (uint32_t)&I2S->DATA[self->serializer];
     #endif
-    #ifdef SAMD51
+    #ifdef SAM_D5X_E5X
     descriptor->SRCADDR.reg = (uint32_t)&I2S->RXDATA;
     #endif
 
@@ -295,7 +319,7 @@ static void setup_dma(audiobusio_pdmin_obj_t* self, uint32_t length,
         #ifdef SAMD21
         second_descriptor->SRCADDR.reg = (uint32_t)&I2S->DATA[self->serializer];
         #endif
-        #ifdef SAMD51
+        #ifdef SAM_D5X_E5X
         second_descriptor->SRCADDR.reg = (uint32_t)&I2S->RXDATA;
         #endif
         second_descriptor->BTCTRL.reg = DMAC_BTCTRL_VALID |
@@ -316,7 +340,7 @@ static void setup_dma(audiobusio_pdmin_obj_t* self, uint32_t length,
 // higher sample rate than specified.  Then after the audio is
 // recorded, a more expensive filter non-real-time filter could be
 // used to down-sample and low-pass.
-uint16_t sinc_filter [OVERSAMPLING] = {
+const uint16_t sinc_filter [OVERSAMPLING] = {
     0, 2, 9, 21, 39, 63, 94, 132,
     179, 236, 302, 379, 467, 565, 674, 792,
     920, 1055, 1196, 1341, 1487, 1633, 1776, 1913,
@@ -327,7 +351,11 @@ uint16_t sinc_filter [OVERSAMPLING] = {
     94, 63, 39, 21, 9, 2, 0, 0
 };
 
-#define REPEAT_16_TIMES(X) X X X X X X X X X X X X X X X X
+#ifdef SAMD21
+#define REPEAT_16_TIMES(X) do { for(uint8_t j=0; j<4; j++) { X X X X } } while (0)
+#else
+#define REPEAT_16_TIMES(X) do { X X X X X X X X X X X X X X X X } while(0)
+#endif
 
 static uint16_t filter_sample(uint32_t pdm_samples[4]) {
     uint16_t running_sum = 0;
@@ -344,7 +372,7 @@ static uint16_t filter_sample(uint32_t pdm_samples[4]) {
                 filter_ptr++;
                 pdm_sample <<= 1;
             }
-            )
+            );
     }
     return running_sum;
 }
@@ -353,11 +381,9 @@ static uint16_t filter_sample(uint32_t pdm_samples[4]) {
 // output_buffer_length is the number of slots, not the number of bytes.
 uint32_t common_hal_audiobusio_pdmin_record_to_buffer(audiobusio_pdmin_obj_t* self,
         uint16_t* output_buffer, uint32_t output_buffer_length) {
-    uint8_t dma_channel = audio_dma_allocate_channel();
-    uint8_t event_channel = find_sync_event_channel();
-    if (event_channel >= EVSYS_SYNCH_NUM) {
-        mp_raise_RuntimeError(translate("All sync event channels in use"));
-    }
+    uint8_t dma_channel = dma_allocate_channel();
+    pdmin_event_channel = find_sync_event_channel_raise();
+    pdmin_dma_block_done = false;
 
     // We allocate two buffers on the stack to use for double buffering.
     const uint8_t samples_per_buffer = SAMPLES_PER_BUFFER;
@@ -380,7 +406,7 @@ uint32_t common_hal_audiobusio_pdmin_record_to_buffer(audiobusio_pdmin_obj_t* se
     #endif
 
     dma_configure(dma_channel, trigger_source, true);
-    init_event_channel_interrupt(event_channel, CORE_GCLK, EVSYS_ID_GEN_DMAC_CH_0 + dma_channel);
+    init_event_channel_interrupt(pdmin_event_channel, CORE_GCLK, EVSYS_ID_GEN_DMAC_CH_0 + dma_channel);
     // Turn on serializer now to get it in sync with DMA.
     i2s_set_serializer_enable(self->serializer, true);
     audio_dma_enable_channel(dma_channel);
@@ -391,23 +417,12 @@ uint32_t common_hal_audiobusio_pdmin_record_to_buffer(audiobusio_pdmin_obj_t* se
 
     uint32_t remaining_samples_needed = output_buffer_length;
     while (values_output < output_buffer_length) {
-        if (event_interrupt_overflow(event_channel)) {
-            // Looks like we aren't keeping up. We shouldn't skip a buffer so stop early.
-            break;
-        }
-        // Wait for the next buffer to fill
-        uint32_t wait_counts = 0;
-        #ifdef SAMD21
-          #define MAX_WAIT_COUNTS 1000
-        #endif
-        #ifdef SAMD51
-          #define MAX_WAIT_COUNTS 6000
-        #endif
-        // If wait_counts exceeds the max count, buffer has probably stopped filling;
-        // DMA may have missed an I2S trigger event.
-        while (!event_interrupt_active(event_channel) && ++wait_counts < MAX_WAIT_COUNTS) {
+        while (!pdmin_dma_block_done) {
             RUN_BACKGROUND_TASKS;
         }
+        common_hal_mcu_disable_interrupts();
+        pdmin_dma_block_done = false;
+        common_hal_mcu_enable_interrupts();
 
         // The mic is running all the time, so we don't need to wait the usual 10msec or 100msec
         // for it to start up.
@@ -419,6 +434,7 @@ uint32_t common_hal_audiobusio_pdmin_record_to_buffer(audiobusio_pdmin_obj_t* se
             buffer = second_buffer;
             descriptor = &second_descriptor;
         }
+
         // Decimate and filter the buffer that was just filled.
         uint32_t samples_gathered = descriptor->BTCNT.reg / words_per_sample;
         // Don't run off the end of output buffer. Process only as many as needed.
@@ -461,14 +477,11 @@ uint32_t common_hal_audiobusio_pdmin_record_to_buffer(audiobusio_pdmin_obj_t* se
         }
     }
 
-    disable_event_channel(event_channel);
-    audio_dma_free_channel(dma_channel);
+    disable_event_channel(pdmin_event_channel);
+    pdmin_event_channel = EVSYS_SYNCH_NUM;  // Invalid event_channel.
+    dma_free_channel(dma_channel);
     // Turn off serializer, but leave clock on, to avoid mic startup delay.
     i2s_set_serializer_enable(self->serializer, false);
 
     return values_output;
-}
-
-void common_hal_audiobusio_pdmin_record_to_file(audiobusio_pdmin_obj_t* self, uint8_t* buffer, uint32_t length) {
-
 }

@@ -37,7 +37,7 @@
 //| class Shape:
 //|     """Represents a shape made by defining boundaries that may be mirrored."""
 //|
-//|     def __init__(self, width: int, height: int, *, mirror_x: bool = False, mirror_y: bool = False):
+//|     def __init__(self, width: int, height: int, *, mirror_x: bool = False, mirror_y: bool = False) -> None:
 //|         """Create a Shape object with the given fixed size. Each pixel is one bit and is stored by the
 //|         column boundaries of the shape on each row. Each row's boundary defaults to the full row.
 //|
@@ -47,7 +47,7 @@
 //|         :param bool mirror_y: When true the top boundary is mirrored to the bottom."""
 //|         ...
 //|
-STATIC mp_obj_t displayio_shape_make_new(const mp_obj_type_t *type, size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
+STATIC mp_obj_t displayio_shape_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *all_args) {
     enum { ARG_width, ARG_height, ARG_mirror_x, ARG_mirror_y };
     static const mp_arg_t allowed_args[] = {
         { MP_QSTR_width, MP_ARG_REQUIRED | MP_ARG_INT },
@@ -56,7 +56,7 @@ STATIC mp_obj_t displayio_shape_make_new(const mp_obj_type_t *type, size_t n_arg
         { MP_QSTR_mirror_y, MP_ARG_BOOL | MP_ARG_KW_ONLY, {.u_bool = false} },
     };
     mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
-    mp_arg_parse_all(n_args, pos_args, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
+    mp_arg_parse_all_kw_array(n_args, n_kw, all_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
 
     mp_int_t width = args[ARG_width].u_int;
     if (width < 1) {
@@ -79,12 +79,12 @@ STATIC mp_obj_t displayio_shape_make_new(const mp_obj_type_t *type, size_t n_arg
 }
 
 
-//|     def set_boundary(self, y: Any, start_x: Any, end_x: Any) -> Any:
+//|     def set_boundary(self, y: int, start_x: int, end_x: int) -> None:
 //|         """Loads pre-packed data into the given row."""
 //|         ...
 //|
 STATIC mp_obj_t displayio_shape_obj_set_boundary(size_t n_args, const mp_obj_t *args) {
-    (void) n_args;
+    (void)n_args;
     displayio_shape_t *self = MP_OBJ_TO_PTR(args[0]);
     mp_int_t y;
     if (!mp_obj_get_int_maybe(args[1], &y)) {
@@ -113,5 +113,5 @@ const mp_obj_type_t displayio_shape_type = {
     { &mp_type_type },
     .name = MP_QSTR_Shape,
     .make_new = displayio_shape_make_new,
-    .locals_dict = (mp_obj_dict_t*)&displayio_shape_locals_dict,
+    .locals_dict = (mp_obj_dict_t *)&displayio_shape_locals_dict,
 };

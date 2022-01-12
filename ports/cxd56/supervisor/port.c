@@ -33,22 +33,37 @@
 
 #include "sched/sched.h"
 
-#include "boards/board.h"
+#include "shared-bindings/rtc/__init__.h"
 
+#include "supervisor/board.h"
 #include "supervisor/port.h"
+#include "supervisor/background_callback.h"
+#include "supervisor/usb.h"
 #include "supervisor/shared/tick.h"
 
 #include "common-hal/microcontroller/Pin.h"
 #include "common-hal/analogio/AnalogIn.h"
 #include "common-hal/pulseio/PulseOut.h"
-#include "common-hal/pulseio/PWMOut.h"
+#include "common-hal/pwmio/PWMOut.h"
 #include "common-hal/busio/UART.h"
+
+#define SPRESENSE_MEM_ALIGN (32)
+
+uint32_t *heap;
+uint32_t heap_size;
 
 safe_mode_t port_init(void) {
     boardctl(BOARDIOC_INIT, 0);
 
     // Wait until RTC is available
-    while (g_rtc_enabled == false);
+    while (g_rtc_enabled == false) {
+        ;
+    }
+
+    heap = memalign(SPRESENSE_MEM_ALIGN, 128 * 1024);
+    uint32_t size = CONFIG_RAM_START + CONFIG_RAM_SIZE - (uint32_t)heap - 2 * SPRESENSE_MEM_ALIGN;
+    heap = realloc(heap, size);
+    heap_size = size / sizeof(uint32_t);
 
     if (board_requests_safe_mode()) {
         return USER_SAFE_MODE;
@@ -59,28 +74,38 @@ safe_mode_t port_init(void) {
 
 void reset_cpu(void) {
     boardctl(BOARDIOC_RESET, 0);
+    for (;;) {
+    }
 }
 
 void reset_port(void) {
-#if CIRCUITPY_ANALOGIO
+    #if CIRCUITPY_ANALOGIO
     analogin_reset();
-#endif
-#if CIRCUITPY_PULSEIO
+    #endif
+    #if CIRCUITPY_PULSEIO
     pulseout_reset();
+    #endif
+    #if CIRCUITPY_PWMIO
     pwmout_reset();
-#endif
-#if CIRCUITPY_BUSIO
+    #endif
+    #if CIRCUITPY_BUSIO
     busio_uart_reset();
-#endif
+    #endif
+    #if CIRCUITPY_RTC
+    rtc_reset();
+    #endif
 
     reset_all_pins();
 }
 
 void reset_to_bootloader(void) {
+    boardctl(BOARDIOC_RESET, 0);
+    for (;;) {
+    }
 }
 
-supervisor_allocation* port_fixed_stack(void) {
-    return NULL;
+bool port_has_fixed_stack(void) {
+    return true;
 }
 
 uint32_t *port_stack_get_limit(void) {
@@ -96,11 +121,11 @@ uint32_t *port_stack_get_top(void) {
 }
 
 uint32_t *port_heap_get_bottom(void) {
-    return port_stack_get_limit();
+    return heap;
 }
 
 uint32_t *port_heap_get_top(void) {
-    return port_stack_get_top();
+    return heap + heap_size;
 }
 
 extern uint32_t _ebss;
@@ -114,16 +139,22 @@ uint32_t port_get_saved_word(void) {
     return _ebss;
 }
 
+static background_callback_t callback;
+static void usb_background_do(void *unused) {
+    usb_background();
+}
+
 volatile bool _tick_enabled;
-void board_timerhook(void)
-{
+void board_timerhook(void) {
     // Do things common to all ports when the tick occurs
     if (_tick_enabled) {
         supervisor_tick();
     }
+
+    background_callback_add(&callback, usb_background_do, NULL);
 }
 
-uint64_t port_get_raw_ticks(uint8_t* subticks) {
+uint64_t port_get_raw_ticks(uint8_t *subticks) {
     uint64_t count = cxd56_rtc_count();
     *subticks = count % 32;
 
@@ -143,6 +174,6 @@ void port_disable_tick(void) {
 void port_interrupt_after_ticks(uint32_t ticks) {
 }
 
-void port_sleep_until_interrupt(void) {
+void port_idle_until_interrupt(void) {
     // TODO: Implement sleep.
 }

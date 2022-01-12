@@ -2,14 +2,10 @@
 # parameters that vary based on chip and/or board.
 LD_TEMPLATE_FILE = boards/common.template.ld
 
-# Define an equivalent for MICROPY_LONGINT_IMPL, to pass to $(MPY-TOOL) in py/mkrules.mk
-# $(MPY-TOOL) needs to know what kind of longint to use (if any) to freeze long integers.
-# This should correspond to the MICROPY_LONGINT_IMPL definition in mpconfigport.h.
-MPY_TOOL_LONGINT_IMPL = -mlongint-impl=mpz
-
 INTERNAL_LIBM = 1
 
-USB_SERIAL_NUMBER_LENGTH = 16
+# Number of USB endpoint pairs.
+USB_NUM_ENDPOINT_PAIRS = 8
 
 # All nRF ports have longints.
 LONGINT_IMPL = MPZ
@@ -23,10 +19,15 @@ CIRCUITPY_AUDIOCORE ?= 1
 CIRCUITPY_AUDIOMIXER ?= 1
 CIRCUITPY_AUDIOPWMIO ?= 1
 
+# Native BLEIO is not compatible with HCI _bleio.
+CIRCUITPY_BLEIO_HCI = 0
+
 CIRCUITPY_BLEIO ?= 1
 
-# No I2CSlave implementation
-CIRCUITPY_I2CSLAVE = 0
+# No I2CPeripheral implementation
+CIRCUITPY_I2CPERIPHERAL = 0
+
+CIRCUITPY_IS31FL3741 ?= 1
 
 CIRCUITPY_RTC ?= 1
 
@@ -34,10 +35,22 @@ CIRCUITPY_RTC ?= 1
 CIRCUITPY_FREQUENCYIO = 0
 
 CIRCUITPY_RGBMATRIX ?= 1
+CIRCUITPY_ROTARYIO_SOFTENCODER = 1
 CIRCUITPY_FRAMEBUFFERIO ?= 1
 
-CIRCUITPY_COUNTIO = 0
+CIRCUITPY_COUNTIO ?= 1
 CIRCUITPY_WATCHDOG ?= 1
+
+# Sleep and Wakeup
+CIRCUITPY_ALARM ?= 1
+
+# Turn on the BLE file service
+CIRCUITPY_BLE_FILE_SERVICE ?= 1
+
+# Turn on the BLE serial service
+CIRCUITPY_SERIAL_BLE ?= 1
+
+CIRCUITPY_COMPUTED_GOTO_SAVE_SPACE ?= 1
 
 # nRF52840-specific
 

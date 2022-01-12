@@ -29,7 +29,6 @@
 
 #include "shared-bindings/digitalio/DigitalInOut.h"
 #include "shared-bindings/displayio/Group.h"
-#include "shared-bindings/pulseio/PWMOut.h"
 
 #include "shared-module/displayio/area.h"
 #include "shared-module/displayio/display_core.h"
@@ -39,9 +38,9 @@ typedef struct {
     displayio_display_core_t core;
     digitalio_digitalinout_obj_t busy;
     uint32_t milliseconds_per_frame;
-    uint8_t* start_sequence;
+    const uint8_t *start_sequence;
     uint32_t start_sequence_len;
-    uint8_t* stop_sequence;
+    const uint8_t *stop_sequence;
     uint32_t stop_sequence_len;
     uint16_t refresh_time;
     uint16_t set_column_window_command;
@@ -56,13 +55,16 @@ typedef struct {
     bool black_bits_inverted;
     bool color_bits_inverted;
     bool refreshing;
+    bool grayscale;
     display_chip_select_behavior_t chip_select;
 } displayio_epaperdisplay_obj_t;
 
-void displayio_epaperdisplay_background(displayio_epaperdisplay_obj_t* self);
-void release_epaperdisplay(displayio_epaperdisplay_obj_t* self);
-bool maybe_refresh_epaperdisplay(void);
+void displayio_epaperdisplay_change_refresh_mode_parameters(displayio_epaperdisplay_obj_t *self,
+    mp_buffer_info_t *start_sequence, float seconds_per_frame);
+void displayio_epaperdisplay_background(displayio_epaperdisplay_obj_t *self);
+void release_epaperdisplay(displayio_epaperdisplay_obj_t *self);
+size_t maybe_refresh_epaperdisplay(void);
 
-void displayio_epaperdisplay_collect_ptrs(displayio_epaperdisplay_obj_t* self);
+void displayio_epaperdisplay_collect_ptrs(displayio_epaperdisplay_obj_t *self);
 
 #endif // MICROPY_INCLUDED_SHARED_MODULE_DISPLAYIO_EPAPERDISPLAY_H

@@ -13,7 +13,9 @@ is limited.
 
     ../ports/atmel-samd/README
     ../ports/cxd56/README
+    ../ports/espressif/README
     ../ports/litex/README
     ../ports/mimxrt10xx/README
     ../ports/nrf/README
+    ../ports/raspberrypi/README
     ../ports/stm/README

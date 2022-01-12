@@ -24,7 +24,7 @@
  * THE SOFTWARE.
  */
 
-#include "boards/board.h"
+#include "supervisor/board.h"
 #include "mpconfigboard.h"
 #include "py/obj.h"
 #include "peripherals/nrf/pins.h"
@@ -33,21 +33,31 @@
 #include "nrf_gpio.h"
 
 void board_init(void) {
+    // Turn on power to sensors and neopixels.
+    nrf_gpio_cfg(POWER_SWITCH_PIN->number,
+        NRF_GPIO_PIN_DIR_OUTPUT,
+        NRF_GPIO_PIN_INPUT_DISCONNECT,
+        NRF_GPIO_PIN_NOPULL,
+        NRF_GPIO_PIN_S0S1,
+        NRF_GPIO_PIN_NOSENSE);
+    nrf_gpio_pin_write(POWER_SWITCH_PIN->number, false);
+}
+
+void board_deinit(void) {
+    // Turn off power to sensors and neopixels.
+    nrf_gpio_cfg(POWER_SWITCH_PIN->number,
+        NRF_GPIO_PIN_DIR_OUTPUT,
+        NRF_GPIO_PIN_INPUT_DISCONNECT,
+        NRF_GPIO_PIN_NOPULL,
+        NRF_GPIO_PIN_S0S1,
+        NRF_GPIO_PIN_NOSENSE);
+    nrf_gpio_pin_write(POWER_SWITCH_PIN->number, true);
 }
 
 bool board_requests_safe_mode(void) {
-  return false;
+    return false;
 }
 
 void reset_board(void) {
-    // Turn off board.POWER_SWITCH (power-saving switch) on each soft reload, to prevent confusion.
-    nrf_gpio_cfg(POWER_SWITCH_PIN->number,
-                 NRF_GPIO_PIN_DIR_OUTPUT,
-                 NRF_GPIO_PIN_INPUT_DISCONNECT,
-                 NRF_GPIO_PIN_NOPULL,
-                 NRF_GPIO_PIN_S0S1,
-                 NRF_GPIO_PIN_NOSENSE);
-    nrf_gpio_pin_write(POWER_SWITCH_PIN->number, false);
-
-    board_reset_user_neopixels();
+    board_reset_user_neopixels(&pin_P0_13, 10);
 }

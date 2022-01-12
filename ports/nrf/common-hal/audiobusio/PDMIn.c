@@ -25,6 +25,7 @@
  */
 
 #include "common-hal/audiobusio/PDMIn.h"
+#include "shared-bindings/audiobusio/PDMIn.h"
 #include "shared-bindings/microcontroller/Pin.h"
 
 #include "py/runtime.h"
@@ -35,13 +36,13 @@ NRF_PDM_Type *nrf_pdm = NRF_PDM;
 static uint32_t dummy_buffer[4];
 
 // Caller validates that pins are free.
-void common_hal_audiobusio_pdmin_construct(audiobusio_pdmin_obj_t* self,
-                                           const mcu_pin_obj_t* clock_pin,
-                                           const mcu_pin_obj_t* data_pin,
-                                           uint32_t sample_rate,
-                                           uint8_t bit_depth,
-                                           bool mono,
-                                           uint8_t oversample) {
+void common_hal_audiobusio_pdmin_construct(audiobusio_pdmin_obj_t *self,
+    const mcu_pin_obj_t *clock_pin,
+    const mcu_pin_obj_t *data_pin,
+    uint32_t sample_rate,
+    uint8_t bit_depth,
+    bool mono,
+    uint8_t oversample) {
     claim_pin(clock_pin);
     claim_pin(data_pin);
 
@@ -68,29 +69,29 @@ void common_hal_audiobusio_pdmin_construct(audiobusio_pdmin_obj_t* self,
     nrf_pdm->TASKS_START = 1;
 }
 
-bool common_hal_audiobusio_pdmin_deinited(audiobusio_pdmin_obj_t* self) {
-    return !self->clock_pin_number;
+bool common_hal_audiobusio_pdmin_deinited(audiobusio_pdmin_obj_t *self) {
+    return self->clock_pin_number == NO_PIN;
 }
 
-void common_hal_audiobusio_pdmin_deinit(audiobusio_pdmin_obj_t* self) {
+void common_hal_audiobusio_pdmin_deinit(audiobusio_pdmin_obj_t *self) {
     nrf_pdm->ENABLE = 0;
 
     reset_pin_number(self->clock_pin_number);
-    self->clock_pin_number = 0;
+    self->clock_pin_number = NO_PIN;
     reset_pin_number(self->data_pin_number);
-    self->data_pin_number = 0;
+    self->data_pin_number = NO_PIN;
 }
 
-uint8_t common_hal_audiobusio_pdmin_get_bit_depth(audiobusio_pdmin_obj_t* self) {
+uint8_t common_hal_audiobusio_pdmin_get_bit_depth(audiobusio_pdmin_obj_t *self) {
     return 16;
 }
 
-uint32_t common_hal_audiobusio_pdmin_get_sample_rate(audiobusio_pdmin_obj_t* self) {
+uint32_t common_hal_audiobusio_pdmin_get_sample_rate(audiobusio_pdmin_obj_t *self) {
     return 16000;
 }
 
-uint32_t common_hal_audiobusio_pdmin_record_to_buffer(audiobusio_pdmin_obj_t* self,
-        uint16_t* output_buffer, uint32_t output_buffer_length) {
+uint32_t common_hal_audiobusio_pdmin_record_to_buffer(audiobusio_pdmin_obj_t *self,
+    uint16_t *output_buffer, uint32_t output_buffer_length) {
     // Note: Adafruit's module has SELECT pulled to GND, which makes the DATA
     // valid when the CLK is low, therefore it must be sampled on the rising edge.
     if (self->mono) {
@@ -113,11 +114,11 @@ uint32_t common_hal_audiobusio_pdmin_record_to_buffer(audiobusio_pdmin_obj_t* se
 
     // Step 3. wait for PDM to end
     while (!nrf_pdm->EVENTS_END) {
-       MICROPY_VM_HOOK_LOOP;
+        MICROPY_VM_HOOK_LOOP;
     }
 
     // Step 4. They want unsigned
-    for (uint32_t i=0; i<output_buffer_length; i++) {
+    for (uint32_t i = 0; i < output_buffer_length; i++) {
         output_buffer[i] += 32768;
     }
 

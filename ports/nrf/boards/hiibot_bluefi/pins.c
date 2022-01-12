@@ -1,9 +1,11 @@
 #include "shared-bindings/board/__init__.h"
 
-#include "boards/board.h"
+#include "supervisor/board.h"
 #include "shared-module/displayio/__init__.h"
 
 STATIC const mp_rom_map_elem_t board_module_globals_table[] = {
+    CIRCUITPYTHON_BOARD_DICT_STANDARD_ITEMS
+
     { MP_ROM_QSTR(MP_QSTR_P0), MP_ROM_PTR(&pin_P0_28) },
     { MP_ROM_QSTR(MP_QSTR_D0), MP_ROM_PTR(&pin_P0_28) },
     { MP_ROM_QSTR(MP_QSTR_A0), MP_ROM_PTR(&pin_P0_28) },
@@ -70,6 +72,7 @@ STATIC const mp_rom_map_elem_t board_module_globals_table[] = {
 
     { MP_ROM_QSTR(MP_QSTR_P17), MP_ROM_PTR(&pin_P1_12) },
     { MP_ROM_QSTR(MP_QSTR_D17), MP_ROM_PTR(&pin_P1_12) },
+    { MP_ROM_QSTR(MP_QSTR_LED), MP_ROM_PTR(&pin_P1_12) },
     { MP_ROM_QSTR(MP_QSTR_REDLED), MP_ROM_PTR(&pin_P1_12) },
 
     { MP_ROM_QSTR(MP_QSTR_P18), MP_ROM_PTR(&pin_P1_10) },
@@ -109,10 +112,10 @@ STATIC const mp_rom_map_elem_t board_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_D26), MP_ROM_PTR(&pin_P0_27) },
     { MP_ROM_QSTR(MP_QSTR_TFT_DC), MP_ROM_PTR(&pin_P0_27) },
 
-    { MP_ROM_QSTR(MP_QSTR_P27), MP_ROM_PTR(&pin_P1_14) },
-    { MP_ROM_QSTR(MP_QSTR_D27), MP_ROM_PTR(&pin_P1_14) },
-    { MP_ROM_QSTR(MP_QSTR_TFT_RESET), MP_ROM_PTR(&pin_P1_14) },
-    { MP_ROM_QSTR(MP_QSTR_TFT_BACKLIGHT), MP_ROM_PTR(&pin_P1_14) },
+    { MP_ROM_QSTR(MP_QSTR_P27), MP_ROM_PTR(&pin_P1_13) },
+    { MP_ROM_QSTR(MP_QSTR_D27), MP_ROM_PTR(&pin_P1_13) },
+    // { MP_ROM_QSTR(MP_QSTR_TFT_RESET), MP_ROM_PTR(&pin_P1_13) },
+    { MP_ROM_QSTR(MP_QSTR_TFT_BACKLIGHT), MP_ROM_PTR(&pin_P1_13) },
 
     // P28~P33/D28~D33 connecte into QSPI FlashROM (W25Q16JV_IQ)
 

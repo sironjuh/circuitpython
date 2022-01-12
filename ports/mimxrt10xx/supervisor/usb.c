@@ -27,16 +27,17 @@
 
 #include "fsl_clock.h"
 #include "tusb.h"
+#include "supervisor/usb.h"
 
 void init_usb_hardware(void) {
     CLOCK_EnableUsbhs0PhyPllClock(kCLOCK_Usbphy480M, 480000000U);
     CLOCK_EnableUsbhs0Clock(kCLOCK_Usb480M, 480000000U);
 
-#ifdef USBPHY
+    #ifdef USBPHY
     USBPHY_Type *usb_phy = USBPHY;
-#else
+    #else
     USBPHY_Type *usb_phy = USBPHY1;
-#endif
+    #endif
 
     // Enable PHY support for Low speed device + LS via FS Hub
     usb_phy->CTRL |= USBPHY_CTRL_SET_ENUTMILEVEL2_MASK | USBPHY_CTRL_SET_ENUTMILEVEL3_MASK;
@@ -49,12 +50,9 @@ void init_usb_hardware(void) {
     phytx &= ~(USBPHY_TX_D_CAL_MASK | USBPHY_TX_TXCAL45DM_MASK | USBPHY_TX_TXCAL45DP_MASK);
     phytx |= USBPHY_TX_D_CAL(0x0C) | USBPHY_TX_TXCAL45DP(0x06) | USBPHY_TX_TXCAL45DM(0x06);
     usb_phy->TX = phytx;
-
-    // Temporarily disable the data cache until we can sort out all of the spots in TinyUSB that
-    // need the cache invalidated or cleaned.
-    SCB_DisableDCache();
 }
 
+void USB_OTG1_IRQHandler(void);
 void USB_OTG1_IRQHandler(void) {
-    tud_int_handler(0);
+    usb_irq_handler();
 }

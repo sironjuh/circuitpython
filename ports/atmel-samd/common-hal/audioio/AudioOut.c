@@ -57,7 +57,7 @@
 #ifdef SAMD21
 static void ramp_value(uint16_t start, uint16_t end) {
     start = DAC->DATA.reg;
-    int32_t diff = (int32_t) end - start;
+    int32_t diff = (int32_t)end - start;
     int32_t step = 49;
     int32_t steps = diff / step;
     if (diff < 0) {
@@ -74,9 +74,9 @@ static void ramp_value(uint16_t start, uint16_t end) {
 }
 #endif
 
-#ifdef SAMD51
+#ifdef SAM_D5X_E5X
 static void ramp_value(uint16_t start, uint16_t end) {
-    int32_t diff = (int32_t) end - start;
+    int32_t diff = (int32_t)end - start;
     int32_t step = 49;
     int32_t steps = diff / step;
     if (diff < 0) {
@@ -102,10 +102,12 @@ void audioout_reset(void) {
     return;
     #endif
     #ifdef SAMD21
-    while (DAC->STATUS.reg & DAC_STATUS_SYNCBUSY) {}
+    while (DAC->STATUS.reg & DAC_STATUS_SYNCBUSY) {
+    }
     #endif
-    #ifdef SAMD51
-    while (DAC->SYNCBUSY.reg & DAC_SYNCBUSY_SWRST) {}
+    #ifdef SAM_D5X_E5X
+    while (DAC->SYNCBUSY.reg & DAC_SYNCBUSY_SWRST) {
+    }
     #endif
     if (DAC->CTRLA.bit.ENABLE) {
         ramp_value(0x8000, 0);
@@ -116,9 +118,9 @@ void audioout_reset(void) {
 }
 
 // Caller validates that pins are free.
-void common_hal_audioio_audioout_construct(audioio_audioout_obj_t* self,
-        const mcu_pin_obj_t* left_channel, const mcu_pin_obj_t* right_channel, uint16_t quiescent_value) {
-    #ifdef SAMD51
+void common_hal_audioio_audioout_construct(audioio_audioout_obj_t *self,
+    const mcu_pin_obj_t *left_channel, const mcu_pin_obj_t *right_channel, uint16_t quiescent_value) {
+    #ifdef SAM_D5X_E5X
     bool dac_clock_enabled = hri_mclk_get_APBDMASK_DAC_bit(MCLK);
     #endif
 
@@ -138,7 +140,7 @@ void common_hal_audioio_audioout_construct(audioio_audioout_obj_t* self,
     }
     claim_pin(left_channel);
     #endif
-    #ifdef SAMD51
+    #ifdef SAM_D5X_E5X
     self->right_channel = NULL;
     if (left_channel != &pin_PA02 && left_channel != &pin_PA05) {
         mp_raise_ValueError(translate("Invalid pin for left channel"));
@@ -159,7 +161,7 @@ void common_hal_audioio_audioout_construct(audioio_audioout_obj_t* self,
     self->left_channel = left_channel;
     audio_dma_init(&self->left_dma);
 
-    #ifdef SAMD51
+    #ifdef SAM_D5X_E5X
     hri_mclk_set_APBDMASK_DAC_bit(MCLK);
     #endif
 
@@ -174,14 +176,15 @@ void common_hal_audioio_audioout_construct(audioio_audioout_obj_t* self,
     _gclk_enable_channel(DAC_GCLK_ID, CONF_GCLK_DAC_SRC);
 
     DAC->CTRLA.bit.SWRST = 1;
-    while (DAC->CTRLA.bit.SWRST == 1) {}
+    while (DAC->CTRLA.bit.SWRST == 1) {
+    }
     // Make sure there are no outstanding access errors. (Reading DATA can cause this.)
-    #ifdef SAMD51
+    #ifdef SAM_D5X_E5X
     PAC->INTFLAGD.reg = PAC_INTFLAGD_DAC;
     #endif
 
     bool channel0_enabled = true;
-    #ifdef SAMD51
+    #ifdef SAM_D5X_E5X
     channel0_enabled = self->left_channel == &pin_PA02 || self->right_channel == &pin_PA02;
     bool channel1_enabled = self->left_channel == &pin_PA05 || self->right_channel == &pin_PA05;
     #endif
@@ -191,24 +194,24 @@ void common_hal_audioio_audioout_construct(audioio_audioout_obj_t* self,
         DAC->EVCTRL.reg |= DAC_EVCTRL_STARTEI;
         // We disable the voltage pump because we always run at 3.3v.
         DAC->CTRLB.reg = DAC_CTRLB_REFSEL_AVCC |
-                         DAC_CTRLB_LEFTADJ |
-                         DAC_CTRLB_EOEN |
-                         DAC_CTRLB_VPD;
+            DAC_CTRLB_LEFTADJ |
+            DAC_CTRLB_EOEN |
+            DAC_CTRLB_VPD;
         #endif
-        #ifdef SAMD51
+        #ifdef SAM_D5X_E5X
         DAC->EVCTRL.reg |= DAC_EVCTRL_STARTEI0;
-        DAC->DACCTRL[0].reg = DAC_DACCTRL_CCTRL_CC100K |
-                              DAC_DACCTRL_ENABLE |
-                              DAC_DACCTRL_LEFTADJ;
+        DAC->DACCTRL[0].reg = DAC_DACCTRL_CCTRL_CC12M |
+            DAC_DACCTRL_ENABLE |
+            DAC_DACCTRL_LEFTADJ;
         DAC->CTRLB.reg = DAC_CTRLB_REFSEL_VREFPU;
         #endif
     }
-    #ifdef SAMD51
+    #ifdef SAM_D5X_E5X
     if (channel1_enabled) {
         DAC->EVCTRL.reg |= DAC_EVCTRL_STARTEI1;
-        DAC->DACCTRL[1].reg = DAC_DACCTRL_CCTRL_CC100K |
-                              DAC_DACCTRL_ENABLE |
-                              DAC_DACCTRL_LEFTADJ;
+        DAC->DACCTRL[1].reg = DAC_DACCTRL_CCTRL_CC12M |
+            DAC_DACCTRL_ENABLE |
+            DAC_DACCTRL_LEFTADJ;
         DAC->CTRLB.reg = DAC_CTRLB_REFSEL_VREFPU;
     }
     #endif
@@ -216,12 +219,16 @@ void common_hal_audioio_audioout_construct(audioio_audioout_obj_t* self,
     // Re-enable the DAC
     DAC->CTRLA.bit.ENABLE = 1;
     #ifdef SAMD21
-    while (DAC->STATUS.bit.SYNCBUSY == 1) {}
+    while (DAC->STATUS.bit.SYNCBUSY == 1) {
+    }
     #endif
-    #ifdef SAMD51
-    while (DAC->SYNCBUSY.bit.ENABLE == 1) {}
-    while (channel0_enabled && DAC->STATUS.bit.READY0 == 0) {}
-    while (channel1_enabled && DAC->STATUS.bit.READY1 == 0) {}
+    #ifdef SAM_D5X_E5X
+    while (DAC->SYNCBUSY.bit.ENABLE == 1) {
+    }
+    while (channel0_enabled && DAC->STATUS.bit.READY0 == 0) {
+    }
+    while (channel1_enabled && DAC->STATUS.bit.READY1 == 0) {
+    }
     #endif
 
     // Use a timer to coordinate when DAC conversions occur.
@@ -241,9 +248,9 @@ void common_hal_audioio_audioout_construct(audioio_audioout_obj_t* self,
     }
     self->tc_index = tc_index;
 
-    // Use the 48mhz clocks on both the SAMD21 and 51 because we will be going much slower.
+    // Use the 48MHz clocks on both the SAMD21 and 51 because we will be going much slower.
     uint8_t tc_gclk = 0;
-    #ifdef SAMD51
+    #ifdef SAM_D5X_E5X
     tc_gclk = 1;
     #endif
 
@@ -253,7 +260,7 @@ void common_hal_audioio_audioout_construct(audioio_audioout_obj_t* self,
     // Don't bother setting the period. We set it before you playback anything.
     tc_set_enable(t, false);
     tc_reset(t);
-    #ifdef SAMD51
+    #ifdef SAM_D5X_E5X
     t->COUNT16.WAVE.reg = TC_WAVE_WAVEGEN_MFRQ;
     #endif
     #ifdef SAMD21
@@ -268,7 +275,7 @@ void common_hal_audioio_audioout_construct(audioio_audioout_obj_t* self,
     #ifdef SAMD21
     #define FIRST_TC_GEN_ID EVSYS_ID_GEN_TC3_OVF
     #endif
-    #ifdef SAMD51
+    #ifdef SAM_D5X_E5X
     #define FIRST_TC_GEN_ID EVSYS_ID_GEN_TC0_OVF
     #endif
     uint8_t tc_gen_id = FIRST_TC_GEN_ID + 3 * tc_index;
@@ -282,7 +289,7 @@ void common_hal_audioio_audioout_construct(audioio_audioout_obj_t* self,
         mp_raise_RuntimeError(translate("All event channels in use"));
     }
 
-    #ifdef SAMD51
+    #ifdef SAM_D5X_E5X
     connect_event_user_to_channel(EVSYS_ID_USER_DAC_START_1, channel);
     if (right_channel != NULL) {
         gpio_set_pin_function(self->right_channel->number, GPIO_PIN_FUNCTION_B);
@@ -302,11 +309,11 @@ void common_hal_audioio_audioout_construct(audioio_audioout_obj_t* self,
     // Leave the DMA setup to playback.
 }
 
-bool common_hal_audioio_audioout_deinited(audioio_audioout_obj_t* self) {
+bool common_hal_audioio_audioout_deinited(audioio_audioout_obj_t *self) {
     return self->left_channel == NULL;
 }
 
-void common_hal_audioio_audioout_deinit(audioio_audioout_obj_t* self) {
+void common_hal_audioio_audioout_deinit(audioio_audioout_obj_t *self) {
     if (common_hal_audioio_audioout_deinited(self)) {
         return;
     }
@@ -320,10 +327,12 @@ void common_hal_audioio_audioout_deinit(audioio_audioout_obj_t* self) {
 
     DAC->CTRLA.bit.ENABLE = 0;
     #ifdef SAMD21
-    while (DAC->STATUS.bit.SYNCBUSY == 1) {}
+    while (DAC->STATUS.bit.SYNCBUSY == 1) {
+    }
     #endif
-    #ifdef SAMD51
-    while (DAC->SYNCBUSY.bit.ENABLE == 1) {}
+    #ifdef SAM_D5X_E5X
+    while (DAC->SYNCBUSY.bit.ENABLE == 1) {
+    }
     #endif
 
     disable_event_channel(self->tc_to_dac_event_channel);
@@ -332,13 +341,13 @@ void common_hal_audioio_audioout_deinit(audioio_audioout_obj_t* self) {
 
     reset_pin_number(self->left_channel->number);
     self->left_channel = NULL;
-    #ifdef SAMD51
+    #ifdef SAM_D5X_E5X
     reset_pin_number(self->right_channel->number);
     self->right_channel = NULL;
     #endif
 }
 
-static void set_timer_frequency(Tc* timer, uint32_t frequency) {
+static void set_timer_frequency(Tc *timer, uint32_t frequency) {
     uint32_t system_clock = 48000000;
     uint32_t new_top;
     uint8_t new_divisor;
@@ -359,8 +368,8 @@ static void set_timer_frequency(Tc* timer, uint32_t frequency) {
     tc_wait_for_sync(timer);
 }
 
-void common_hal_audioio_audioout_play(audioio_audioout_obj_t* self,
-                                      mp_obj_t sample, bool loop) {
+void common_hal_audioio_audioout_play(audioio_audioout_obj_t *self,
+    mp_obj_t sample, bool loop) {
     if (common_hal_audioio_audioout_get_playing(self)) {
         common_hal_audioio_audioout_stop(self);
     }
@@ -369,7 +378,7 @@ void common_hal_audioio_audioout_play(audioio_audioout_obj_t* self,
     #ifdef SAMD21
     uint32_t max_sample_rate = 350000;
     #endif
-    #ifdef SAMD51
+    #ifdef SAM_D5X_E5X
     uint32_t max_sample_rate = 1000000;
     #endif
     if (sample_rate > max_sample_rate) {
@@ -377,46 +386,46 @@ void common_hal_audioio_audioout_play(audioio_audioout_obj_t* self,
     }
     #ifdef SAMD21
     result = audio_dma_setup_playback(&self->left_dma, sample, loop, true, 0,
-                                      false /* output unsigned */,
-                                      (uint32_t) &DAC->DATABUF.reg,
-                                      DAC_DMAC_ID_EMPTY);
+        false /* output unsigned */,
+        (uint32_t)&DAC->DATABUF.reg,
+        DAC_DMAC_ID_EMPTY);
     #endif
 
-    #ifdef SAMD51
-    uint32_t left_channel_reg = (uint32_t) &DAC->DATABUF[0].reg;
+    #ifdef SAM_D5X_E5X
+    uint32_t left_channel_reg = (uint32_t)&DAC->DATABUF[0].reg;
     uint8_t tc_trig_id = TC0_DMAC_ID_OVF + 3 * self->tc_index;
     uint8_t left_channel_trigger = tc_trig_id;
     uint32_t right_channel_reg = 0;
     uint8_t right_channel_trigger = tc_trig_id;
     if (self->left_channel == &pin_PA05) {
-        left_channel_reg = (uint32_t) &DAC->DATABUF[1].reg;
+        left_channel_reg = (uint32_t)&DAC->DATABUF[1].reg;
     } else if (self->right_channel == &pin_PA05) {
-        right_channel_reg = (uint32_t) &DAC->DATABUF[1].reg;
+        right_channel_reg = (uint32_t)&DAC->DATABUF[1].reg;
     }
     if (self->right_channel == &pin_PA02) {
-        right_channel_reg = (uint32_t) &DAC->DATABUF[0].reg;
+        right_channel_reg = (uint32_t)&DAC->DATABUF[0].reg;
     }
-    if(right_channel_reg == left_channel_reg + 2 && audiosample_bits_per_sample(sample) == 16) {
+    if (right_channel_reg == left_channel_reg + 2 && audiosample_bits_per_sample(sample) == 16) {
         result = audio_dma_setup_playback(&self->left_dma, sample, loop, false, 0,
-                                          false /* output unsigned */,
-                                          left_channel_reg,
-                                          left_channel_trigger);
+            false /* output unsigned */,
+            left_channel_reg,
+            left_channel_trigger);
     } else {
         result = audio_dma_setup_playback(&self->left_dma, sample, loop, true, 0,
-                                          false /* output unsigned */,
-                                          left_channel_reg,
-                                          left_channel_trigger);
+            false /* output unsigned */,
+            left_channel_reg,
+            left_channel_trigger);
         if (right_channel_reg != 0 && result == AUDIO_DMA_OK) {
             result = audio_dma_setup_playback(&self->right_dma, sample, loop, true, 1,
-                                              false /* output unsigned */,
-                                              right_channel_reg,
-                                              right_channel_trigger);
+                false /* output unsigned */,
+                right_channel_reg,
+                right_channel_trigger);
         }
     }
     #endif
     if (result != AUDIO_DMA_OK) {
         audio_dma_stop(&self->left_dma);
-        #ifdef SAMD51
+        #ifdef SAM_D5X_E5X
         audio_dma_stop(&self->right_dma);
         #endif
         if (result == AUDIO_DMA_DMA_BUSY) {
@@ -425,44 +434,45 @@ void common_hal_audioio_audioout_play(audioio_audioout_obj_t* self,
             mp_raise_RuntimeError(translate("Unable to allocate buffers for signed conversion"));
         }
     }
-    Tc* timer = tc_insts[self->tc_index];
+    Tc *timer = tc_insts[self->tc_index];
     set_timer_frequency(timer, audiosample_sample_rate(sample));
     timer->COUNT16.CTRLBSET.reg = TC_CTRLBSET_CMD_RETRIGGER;
-    while (timer->COUNT16.STATUS.bit.STOP == 1) {}
+    while (timer->COUNT16.STATUS.bit.STOP == 1) {
+    }
     self->playing = true;
 }
 
-void common_hal_audioio_audioout_pause(audioio_audioout_obj_t* self) {
+void common_hal_audioio_audioout_pause(audioio_audioout_obj_t *self) {
     audio_dma_pause(&self->left_dma);
-    #ifdef SAMD51
+    #ifdef SAM_D5X_E5X
     audio_dma_pause(&self->right_dma);
     #endif
 }
 
-void common_hal_audioio_audioout_resume(audioio_audioout_obj_t* self) {
+void common_hal_audioio_audioout_resume(audioio_audioout_obj_t *self) {
     // Clear any overrun/underrun errors
     #ifdef SAMD21
     DAC->INTFLAG.reg = DAC_INTFLAG_UNDERRUN;
     #endif
-    #ifdef SAMD51
+    #ifdef SAM_D5X_E5X
     DAC->INTFLAG.reg = DAC_INTFLAG_UNDERRUN0 | DAC_INTFLAG_UNDERRUN1;
     #endif
 
     audio_dma_resume(&self->left_dma);
-    #ifdef SAMD51
+    #ifdef SAM_D5X_E5X
     audio_dma_resume(&self->right_dma);
     #endif
 }
 
-bool common_hal_audioio_audioout_get_paused(audioio_audioout_obj_t* self) {
+bool common_hal_audioio_audioout_get_paused(audioio_audioout_obj_t *self) {
     return audio_dma_get_paused(&self->left_dma);
 }
 
-void common_hal_audioio_audioout_stop(audioio_audioout_obj_t* self) {
-    Tc* timer = tc_insts[self->tc_index];
-    timer->COUNT16.CTRLBSET.reg = TC_CTRLBSET_CMD_STOP;
+void common_hal_audioio_audioout_stop(audioio_audioout_obj_t *self) {
+    // Do not stop the timer here. There are occasional audible artifacts if the DMA-triggering timer
+    // is stopped between audio plays. (Heard this only on PyPortal with one particular 32kHz sample.)
     audio_dma_stop(&self->left_dma);
-    #ifdef SAMD51
+    #ifdef SAM_D5X_E5X
     audio_dma_stop(&self->right_dma);
     #endif
     // Ramp the DAC to default. The start is ignored when the current value can be readback.
@@ -470,7 +480,7 @@ void common_hal_audioio_audioout_stop(audioio_audioout_obj_t* self) {
     ramp_value(self->quiescent_value, self->quiescent_value);
 }
 
-bool common_hal_audioio_audioout_get_playing(audioio_audioout_obj_t* self) {
+bool common_hal_audioio_audioout_get_playing(audioio_audioout_obj_t *self) {
     bool now_playing = audio_dma_get_playing(&self->left_dma);
     if (self->playing && !now_playing) {
         common_hal_audioio_audioout_stop(self);

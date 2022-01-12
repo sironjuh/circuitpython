@@ -24,7 +24,7 @@
  * THE SOFTWARE.
  */
 
-//Micropython setup
+// Micropython setup
 
 #define MICROPY_HW_BOARD_NAME       "stm32f411ce-blackpill"
 #define MICROPY_HW_MCU_NAME         "STM32F411CE"
@@ -41,6 +41,9 @@
 // #define SPI_FLASH_MISO_PIN          (&pin_PA06)
 // #define SPI_FLASH_SCK_PIN           (&pin_PA05)
 // #define SPI_FLASH_CS_PIN            (&pin_PA04)
+
+#define DEFAULT_I2C_BUS_SCL (&pin_PB06)
+#define DEFAULT_I2C_BUS_SDA (&pin_PB07)
 
 #define CIRCUITPY_AUTORELOAD_DELAY_MS (500)
 

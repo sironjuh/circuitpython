@@ -38,10 +38,7 @@
 //| The `rotaryio` module contains classes to read different rotation encoding schemes. See
 //| `Wikipedia's Rotary Encoder page <https://en.wikipedia.org/wiki/Rotary_encoder>`_ for more
 //| background.
-
-//| .. warning:: This module is not available in some SAMD21 (aka M0) builds. See the :ref:`module-support-matrix` for more info.
 //|
-
 //| All classes change hardware state and should be deinitialized when they
 //| are no longer needed if the program continues after use. To do so, either
 //| call :py:meth:`!deinit` or use a context manager. See
@@ -57,5 +54,7 @@ STATIC MP_DEFINE_CONST_DICT(rotaryio_module_globals, rotaryio_module_globals_tab
 
 const mp_obj_module_t rotaryio_module = {
     .base = { &mp_type_module },
-    .globals = (mp_obj_dict_t*)&rotaryio_module_globals,
+    .globals = (mp_obj_dict_t *)&rotaryio_module_globals,
 };
+
+MP_REGISTER_MODULE(MP_QSTR_rotaryio, rotaryio_module, CIRCUITPY_ROTARYIO);

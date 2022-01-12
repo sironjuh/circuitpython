@@ -18,13 +18,16 @@ MEMORY
     FLASH_BOOTLOADER_SETTINGS (r) : ORIGIN = ${BOOTLOADER_SETTINGS_START_ADDR}, LENGTH = ${BOOTLOADER_SETTINGS_SIZE}
 
 
-    /* 0x2000000 - RAM:ORIGIN is reserved for Softdevice */
-    /* SoftDevice 6.1.0 with 5 connections and various increases takes just under 64kiB.
-    /* To measure the minimum required amount of memory for given configuration, set this number
-       high enough to work and then check the mutation of the value done by sd_ble_enable. */
-    SPIM3_RAM (rw)  : ORIGIN = 0x20000000 + ${SOFTDEVICE_RAM_SIZE}, LENGTH = ${SPIM3_BUFFER_SIZE}
-    RAM (xrw)       : ORIGIN = 0x20000000 + ${SOFTDEVICE_RAM_SIZE} + ${SPIM3_BUFFER_SIZE}, LENGTH = ${RAM_SIZE} - ${SOFTDEVICE_RAM_SIZE} -${SPIM3_BUFFER_SIZE}
-
+    /* SoftDevice RAM must start at the beginning of RAM: 0x2000000 (RAM_START_ADDR).
+       On nRF52840, the first 64kB of RAM is composed of 8 8kB RAM blocks. Above those is
+       RAM block 8, which is 192kB.
+       If SPIM3_BUFFER_RAM_SIZE is 8kB, as opposed to zero, it must be in the first 64kB of RAM.
+       So the amount of RAM reserved for the SoftDevice must be no more than 56kB.
+    */
+    RAM (xrw)       : ORIGIN = ${RAM_START_ADDR}, LENGTH = ${RAM_SIZE}
+    SD_RAM (rw)     : ORIGIN = ${SOFTDEVICE_RAM_START_ADDR}, LENGTH = ${SOFTDEVICE_RAM_SIZE}
+    SPIM3_RAM (rw)  : ORIGIN = ${SPIM3_BUFFER_RAM_START_ADDR}, LENGTH = ${SPIM3_BUFFER_RAM_SIZE}
+    APP_RAM (xrw)   : ORIGIN = ${APP_RAM_START_ADDR}, LENGTH = ${APP_RAM_SIZE}
 }
 
 /* produce a link error if there is not this amount of RAM available */
@@ -32,16 +35,16 @@ _minimum_heap_size = 0;
 
 /* top end of the stack */
 
-/*_stack_end = ORIGIN(RAM) + LENGTH(RAM);*/
-_estack = ORIGIN(RAM) + LENGTH(RAM);
+/*_stack_end = ORIGIN(APP_RAM) + LENGTH(APP_RAM);*/
+_estack = ORIGIN(APP_RAM) + LENGTH(APP_RAM);
 
 /* RAM extents for the garbage collector */
-_ram_end = ORIGIN(RAM) + LENGTH(RAM);
+_ram_end = ORIGIN(APP_RAM) + LENGTH(APP_RAM);
 _heap_end = 0x20020000; /* tunable */
 
 /* nrf52840 SPIM3 needs its own area to work around hardware problems. Nothing else may use this space. */
 _spim3_ram = ORIGIN(SPIM3_RAM);
-_spim3_ram_end = ORIGIN(SPIM3_RAM) + LENGTH(RAM);
+_spim3_ram_end = ORIGIN(SPIM3_RAM) + LENGTH(SPIM3_RAM);
 
 /* define output sections */
 SECTIONS
@@ -59,8 +62,8 @@ SECTIONS
     .text :
     {
         . = ALIGN(4);
-        *(.text)           /* .text sections (code) */
-        *(.text*)          /* .text* sections (code) */
+        *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.text)))           /* .text sections (code) */
+        *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.text*)))          /* .text* sections (code) */
         *(.rodata)         /* .rodata sections (constants, strings, etc.) */
         *(.rodata*)        /* .rodata* sections (constants, strings, etc.) */
     /*  *(.glue_7)   */    /* glue arm to thumb code */
@@ -70,37 +73,37 @@ SECTIONS
         _etext = .;        /* define a global symbol at end of code */
     } >FLASH_FIRMWARE
 
-    /* used by the startup to initialize data */
-    _sidata = .;
-
     /* This is the initialized data section
     The program executes knowing that the data is in the RAM
     but the loader puts the initial values in the FLASH (inidata).
     It is one task of the startup to copy the initial values from FLASH to RAM. */
-    .data : AT (_sidata)
+    .data :
     {
         . = ALIGN(4);
         _sdata = .;        /* create a global symbol at data start; used by startup code in order to initialise the .data section in RAM */
         _ram_start = .;    /* create a global symbol at ram start for garbage collector */
-        *(.data)           /* .data sections */
-        *(.data*)          /* .data* sections */
+        *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.data)))           /* .data sections */
+        *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.data*)))          /* .data* sections */
 
         . = ALIGN(4);
         _edata = .;        /* define a global symbol at data end; used by startup code in order to initialise the .data section in RAM */
-    } >RAM
+    } >APP_RAM AT > FLASH_FIRMWARE
+
+    /* used by the startup to initialize data */
+    _sidata = LOADADDR(.data);
 
     /* Zero-initialized data section */
     .bss :
     {
         . = ALIGN(4);
         _sbss = .;         /* define a global symbol at bss start; used by startup code */
-        *(.bss)
-        *(.bss*)
+        *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.bss)))
+        *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.bss*)))
         *(COMMON)
 
         . = ALIGN(4);
         _ebss = .;         /* define a global symbol at bss end; used by startup code and GC */
-    } >RAM
+    } >APP_RAM
 
     /* Uninitialized data section
     Data placed into this section will remain unchanged across reboots. */
@@ -113,7 +116,7 @@ SECTIONS
 
         . = ALIGN(4);
         _euninitialized = .; /* define a global symbol at uninitialized end; currently unused */
-    } >RAM
+    } >APP_RAM
 
     /* this is to define the start of the heap, and make sure we have a minimum size */
     .heap :
@@ -123,7 +126,7 @@ SECTIONS
 	      PROVIDE ( _end = . );
         _heap_start = .;    /* define a global symbol at heap start */
         . = . + _minimum_heap_size;
-    } >RAM
+    } >APP_RAM
 
     /* this just checks there is enough RAM for the stack */
     .stack :
@@ -131,9 +134,9 @@ SECTIONS
         . = ALIGN(4);
         . = . + ${CIRCUITPY_DEFAULT_STACK_SIZE};
         . = ALIGN(4);
-    } >RAM
+    } >APP_RAM
 
-    /* Remove exception unwinding information, since Circuit Python
+    /* Remove exception unwinding information, since CircuitPython
        does not support this GCC feature. */
     /DISCARD/ :
     {

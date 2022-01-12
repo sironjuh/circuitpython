@@ -35,11 +35,11 @@
 
 // Global millisecond tick count (driven by SysTick interrupt).
 static inline mp_uint_t mp_hal_ticks_ms(void) {
-  return supervisor_ticks_ms32();
+    return supervisor_ticks_ms32();
 }
 // Number of bytes in receive buffer
-volatile uint8_t usb_rx_count;
-volatile bool mp_cdc_enabled;
+extern volatile uint8_t usb_rx_count;
+extern volatile bool mp_cdc_enabled;
 
 int receive_usb(void);
 

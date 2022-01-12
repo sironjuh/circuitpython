@@ -24,7 +24,7 @@
  * THE SOFTWARE.
  */
 
-#include "boards/board.h"
+#include "supervisor/board.h"
 #include "nrf.h"
 #include "nrf_rtc.h"
 
@@ -55,9 +55,12 @@ void board_init(void) {
 }
 
 bool board_requests_safe_mode(void) {
-  return false;
+    return false;
 }
 
 void reset_board(void) {
 
+}
+
+void board_deinit(void) {
 }

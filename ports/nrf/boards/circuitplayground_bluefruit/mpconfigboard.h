@@ -32,6 +32,9 @@
 
 #define MICROPY_HW_LED_STATUS       (&pin_P1_14)
 
+#define MICROPY_HW_NEOPIXEL         (&pin_P0_13)
+#define MICROPY_HW_NEOPIXEL_COUNT   (10)
+
 // Board does not have a 32kHz crystal. It does have a 32MHz crystal.
 #define BOARD_HAS_32KHZ_XTAL (0)
 
@@ -54,13 +57,11 @@
 // Disables onboard peripherals and neopixels to save power.
 #define POWER_SWITCH_PIN            (&pin_P0_06)
 
-#define USER_NEOPIXELS_PIN          (&pin_P0_13)
-
 #define DEFAULT_I2C_BUS_SCL         (&pin_P0_04)
 #define DEFAULT_I2C_BUS_SDA         (&pin_P0_05)
 
-#define DEFAULT_SPI_BUS_SCK         (&pin_P0_05)
-#define DEFAULT_SPI_BUS_MOSI        (&pin_P1_03)
+#define DEFAULT_SPI_BUS_SCK         (&pin_P0_02)
+#define DEFAULT_SPI_BUS_MOSI        (&pin_P0_03)
 #define DEFAULT_SPI_BUS_MISO        (&pin_P0_29)
 
 #define DEFAULT_UART_BUS_RX         (&pin_P0_30)

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2014 MicroPython & CircuitPython contributors (https://github.com/adafruit/circuitpython/graphs/contributors)
+#
+# SPDX-License-Identifier: MIT
+
 include ../py/mkenv.mk
 
 # define main target
@@ -18,8 +22,8 @@ UNAME_S := $(shell uname -s)
 # include py core make definitions
 include $(TOP)/py/py.mk
 
-INC +=  -I.
-INC +=  -I$(TOP)
+INC += -I.
+INC += -I$(TOP)
 INC += -I$(BUILD)
 
 # compiler settings
@@ -62,9 +66,10 @@ LDFLAGS += -static -static-libgcc -static-libstdc++
 endif
 
 # source files
-SRC_C = \
+SRC_C += \
 	main.c \
 	gccollect.c \
+	shared/runtime/gchelper_generic.c \
 	supervisor/stub/safe_mode.c \
 	supervisor/stub/stack.c \
 	supervisor/shared/translate.c
@@ -75,7 +80,9 @@ ifneq (,$(findstring mingw,$(COMPILER_TARGET)))
 	SRC_C += fmode.c
 endif
 
-OBJ = $(PY_O)
+OBJ = $(PY_CORE_O)
 OBJ += $(addprefix $(BUILD)/, $(SRC_C:.c=.o))
+
+$(BUILD)/supervisor/shared/translate.o: $(HEADER_BUILD)/qstrdefs.generated.h
 
 include $(TOP)/py/mkrules.mk

@@ -35,24 +35,50 @@
 #include "shared-bindings/displayio/FourWire.h"
 #include "shared-bindings/displayio/Group.h"
 #include "shared-bindings/displayio/I2CDisplay.h"
-#include "shared-bindings/displayio/ParallelBus.h"
+#if CIRCUITPY_PARALLELDISPLAY
+#include "shared-bindings/paralleldisplay/ParallelBus.h"
+#endif
+#if CIRCUITPY_RGBMATRIX
 #include "shared-bindings/rgbmatrix/RGBMatrix.h"
+#endif
+#if CIRCUITPY_IS31FL3741
+#include "shared-bindings/is31fl3741/IS31FL3741.h"
+#endif
+#if CIRCUITPY_SHARPDISPLAY
+#include "shared-module/sharpdisplay/SharpMemoryFramebuffer.h"
+#endif
+#if CIRCUITPY_VIDEOCORE
+#include "bindings/videocore/Framebuffer.h"
+#endif
 
 typedef struct {
     union {
+        mp_obj_base_t bus_base;
         displayio_fourwire_obj_t fourwire_bus;
         displayio_i2cdisplay_obj_t i2cdisplay_bus;
-        displayio_parallelbus_obj_t parallel_bus;
-#if CIRCUITPY_RGBMATRIX
+        #if CIRCUITPY_PARALLELDISPLAY
+        paralleldisplay_parallelbus_obj_t parallel_bus;
+        #endif
+        #if CIRCUITPY_RGBMATRIX
         rgbmatrix_rgbmatrix_obj_t rgbmatrix;
-#endif
+        #endif
+        #if CIRCUITPY_IS31FL3741
+        is31fl3741_IS31FL3741_obj_t is31fl3741;
+        #endif
+        #if CIRCUITPY_SHARPDISPLAY
+        sharpdisplay_framebuffer_obj_t sharpdisplay;
+        #endif
+        #if CIRCUITPY_VIDEOCORE
+        videocore_framebuffer_obj_t videocore;
+        #endif
     };
     union {
+        mp_obj_base_t display_base;
         displayio_display_obj_t display;
         displayio_epaperdisplay_obj_t epaper_display;
-#if CIRCUITPY_FRAMEBUFFERIO
+        #if CIRCUITPY_FRAMEBUFFERIO
         framebufferio_framebufferdisplay_obj_t framebuffer_display;
-#endif
+        #endif
     };
 } primary_display_t;
 

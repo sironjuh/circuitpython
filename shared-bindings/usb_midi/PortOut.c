@@ -38,7 +38,7 @@
 //| class PortOut:
 //|     """Sends midi messages to a computer over USB"""
 //|
-//|     def __init__(self, ):
+//|     def __init__(self) -> None:
 //|         """You cannot create an instance of `usb_midi.PortOut`.
 //|
 //|         PortOut objects are constructed for every corresponding entry in the USB
@@ -47,7 +47,7 @@
 
 // These are standard stream methods. Code is in py/stream.c.
 //
-//|     def write(self, buf: Any) -> Any:
+//|     def write(self, buf: ReadableBuffer) -> Optional[int]:
 //|         """Write the buffer of bytes to the bus.
 //|
 //|         :return: the number of bytes written
@@ -94,9 +94,12 @@ STATIC const mp_stream_p_t usb_midi_portout_stream_p = {
 
 const mp_obj_type_t usb_midi_portout_type = {
     { &mp_type_type },
+    .flags = MP_TYPE_FLAG_EXTENDED,
     .name = MP_QSTR_PortOut,
-    .getiter = mp_identity_getiter,
-    .iternext = mp_stream_unbuffered_iter,
-    .protocol = &usb_midi_portout_stream_p,
-    .locals_dict = (mp_obj_dict_t*)&usb_midi_portout_locals_dict,
+    .locals_dict = (mp_obj_dict_t *)&usb_midi_portout_locals_dict,
+    MP_TYPE_EXTENDED_FIELDS(
+        .getiter = mp_identity_getiter,
+        .iternext = mp_stream_unbuffered_iter,
+        .protocol = &usb_midi_portout_stream_p,
+        ),
 };

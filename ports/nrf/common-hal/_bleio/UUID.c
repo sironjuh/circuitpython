@@ -30,6 +30,7 @@
 
 #include "py/runtime.h"
 #include "common-hal/_bleio/UUID.h"
+#include "shared-bindings/_bleio/UUID.h"
 #include "shared-bindings/_bleio/__init__.h"
 #include "shared-bindings/_bleio/Adapter.h"
 
@@ -40,7 +41,7 @@
 // If uuid128 is NULL, this is a Bluetooth SIG 16-bit UUID.
 // If uuid128 is not NULL, it's a 128-bit (16-byte) UUID, with bytes 12 and 13 zero'd out, where
 // the 16-bit part goes. Those 16 bits are passed in uuid16.
-void common_hal_bleio_uuid_construct(bleio_uuid_obj_t *self, uint32_t uuid16, const uint8_t uuid128[]) {
+void common_hal_bleio_uuid_construct(bleio_uuid_obj_t *self, mp_int_t uuid16, const uint8_t uuid128[16]) {
     self->nrf_ble_uuid.uuid = uuid16;
     if (uuid128 == NULL) {
         self->nrf_ble_uuid.type = BLE_UUID_TYPE_BLE;
@@ -50,7 +51,6 @@ void common_hal_bleio_uuid_construct(bleio_uuid_obj_t *self, uint32_t uuid16, co
 
         // Register this vendor-specific UUID. Bytes 12 and 13 will be zero.
         check_nrf_error(sd_ble_uuid_vs_add(&vs_uuid, &self->nrf_ble_uuid.type));
-        vm_used_ble = true;
     }
 }
 
@@ -67,7 +67,7 @@ void common_hal_bleio_uuid_get_uuid128(bleio_uuid_obj_t *self, uint8_t uuid128[1
     check_nrf_error(sd_ble_uuid_encode(&self->nrf_ble_uuid, &length, uuid128));
 }
 
-void common_hal_bleio_uuid_pack_into(bleio_uuid_obj_t *self, uint8_t* buf) {
+void common_hal_bleio_uuid_pack_into(bleio_uuid_obj_t *self, uint8_t *buf) {
     if (self->nrf_ble_uuid.type == BLE_UUID_TYPE_BLE) {
         buf[0] = self->nrf_ble_uuid.uuid & 0xff;
         buf[1] = self->nrf_ble_uuid.uuid >> 8;

@@ -24,7 +24,7 @@
  * THE SOFTWARE.
  */
 
-#include "boards/board.h"
+#include "supervisor/board.h"
 #include "mpconfigboard.h"
 #include "hal/include/hal_gpio.h"
 #include "shared-bindings/busio/SPI.h"
@@ -53,11 +53,11 @@ uint8_t stop_sequence[] = {
 };
 
 void board_init(void) {
-    busio_spi_obj_t* spi = &displays[0].fourwire_bus.inline_bus;
+    busio_spi_obj_t *spi = &displays[0].fourwire_bus.inline_bus;
     common_hal_busio_spi_construct(spi, &pin_PB13, &pin_PB15, NULL);
     common_hal_busio_spi_never_reset(spi);
 
-    displayio_fourwire_obj_t* bus = &displays[0].fourwire_bus;
+    displayio_fourwire_obj_t *bus = &displays[0].fourwire_bus;
     bus->base.type = &displayio_fourwire_type;
     common_hal_displayio_fourwire_construct(bus,
         spi,
@@ -68,7 +68,7 @@ void board_init(void) {
         0, // Polarity
         0); // Phase
 
-    displayio_epaperdisplay_obj_t* display = &displays[0].epaper_display;
+    displayio_epaperdisplay_obj_t *display = &displays[0].epaper_display;
     display->base.type = &displayio_epaperdisplay_type;
     common_hal_displayio_epaperdisplay_construct(display,
         bus,
@@ -76,13 +76,13 @@ void board_init(void) {
         sizeof(start_sequence),
         stop_sequence,
         sizeof(stop_sequence),
-        400, // width
-        300, // height
-        400, // RAM width
-        300, // RAM height
+        300, // width
+        400, // height
+        300, // RAM width
+        400, // RAM height
         0, // colstart
         0, // rowstart
-        0, // rotation
+        270, // rotation
         NO_COMMAND, // set_column_window_command
         NO_COMMAND, // set_row_window_command
         NO_COMMAND, // set_current_column_command
@@ -97,7 +97,8 @@ void board_init(void) {
         &pin_PA01, // busy_pin
         false, // busy_state
         5, // seconds_per_frame
-        false); // chip_select (don't always toggle chip select)
+        false, // chip_select (don't always toggle chip select)
+        false); // grayscale
 }
 
 bool board_requests_safe_mode(void) {
@@ -105,4 +106,7 @@ bool board_requests_safe_mode(void) {
 }
 
 void reset_board(void) {
+}
+
+void board_deinit(void) {
 }

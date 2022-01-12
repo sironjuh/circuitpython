@@ -25,10 +25,16 @@ uint32_t common_hal_vectorio_circle_get_pixel(void *obj, int16_t x, int16_t y) {
     int16_t radius = abs(self->radius);
     x = abs(x);
     y = abs(y);
-    if (x+y <= radius) return 1;
-    if (x > radius) return 0;
-    if (y > radius) return 0;
-    const bool pythagorasSmallerThanRadius = (int32_t)x*x + (int32_t)y*y <= (int32_t)radius*radius;
+    if (x + y <= radius) {
+        return 1;
+    }
+    if (x > radius) {
+        return 0;
+    }
+    if (y > radius) {
+        return 0;
+    }
+    const bool pythagorasSmallerThanRadius = (int32_t)x * x + (int32_t)y * y <= (int32_t)radius * radius;
     return pythagorasSmallerThanRadius ? 1 : 0;
 }
 
@@ -52,4 +58,9 @@ void common_hal_vectorio_circle_set_radius(void *obj, int16_t radius) {
     if (self->on_dirty.obj != NULL) {
         self->on_dirty.event(self->on_dirty.obj);
     }
+}
+
+mp_obj_t common_hal_vectorio_circle_get_draw_protocol(void *circle) {
+    vectorio_circle_t *self = circle;
+    return self->draw_protocol_instance;
 }

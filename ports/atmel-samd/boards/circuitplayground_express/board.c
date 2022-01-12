@@ -26,13 +26,12 @@
 
 #include <string.h>
 
-#include "boards/board.h"
+#include "supervisor/board.h"
 #include "common-hal/microcontroller/Pin.h"
 #include "supervisor/shared/board.h"
 #include "hal/include/hal_gpio.h"
 
-void board_init(void)
-{
+void board_init(void) {
 }
 
 // Check the status of the two buttons on CircuitPlayground Express. If both are
@@ -53,5 +52,8 @@ bool board_requests_safe_mode(void) {
 }
 
 void reset_board(void) {
-    board_reset_user_neopixels();
+    board_reset_user_neopixels(&pin_PB23, 10);
+}
+
+void board_deinit(void) {
 }
