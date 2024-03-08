@@ -29,7 +29,7 @@
 #include "shared-bindings/microcontroller/Pin.h"
 
 #include "shared-bindings/busio/SPI.h"
-#include "shared-bindings/displayio/FourWire.h"
+#include "shared-bindings/fourwire/FourWire.h"
 #include "shared-module/displayio/__init__.h"
 #include "shared-module/displayio/mipi_constants.h"
 
@@ -37,20 +37,19 @@ uint8_t display_init_sequence[] = {
     0x01, 0x80, 0x96, //  _SWRESET and Delay 150ms
     0x11, 0x80, 0xFF, //  _SLPOUT and Delay 500ms
     0x3A, 0x81, 0x55, 0x0A, //  _COLMOD and Delay 10ms
-    0x36, 0x01, 0x08, //  _MADCTL
     0x13, 0x80, 0x0A, //  _NORON and Delay 10ms
-    0x36, 0x01, 0xC0, //  _MADCTL
+    0x36, 0x01, 0xC8, //  _MADCTL
     0x29, 0x80, 0xFF, //  _DISPON and Delay 500ms
 };
 
 void board_init(void) {
-    busio_spi_obj_t *spi = &displays[0].fourwire_bus.inline_bus;
-    common_hal_busio_spi_construct(spi, &pin_GPIO7, &pin_GPIO6, NULL);
+    fourwire_fourwire_obj_t *bus = &allocate_display_bus()->fourwire_bus;
+    busio_spi_obj_t *spi = &bus->inline_bus;
+    common_hal_busio_spi_construct(spi, &pin_GPIO7, &pin_GPIO6, NULL, false);
     common_hal_busio_spi_never_reset(spi);
 
-    displayio_fourwire_obj_t *bus = &displays[0].fourwire_bus;
-    bus->base.type = &displayio_fourwire_type;
-    common_hal_displayio_fourwire_construct(bus,
+    bus->base.type = &fourwire_fourwire_type;
+    common_hal_fourwire_fourwire_construct(bus,
         spi,
         &pin_GPIO4, // TFT_DC Command or data
         &pin_GPIO5, // TFT_CS Chip select
@@ -59,9 +58,9 @@ void board_init(void) {
         0, // Polarity
         0); // Phase
 
-    displayio_display_obj_t *display = &displays[0].display;
-    display->base.type = &displayio_display_type;
-    common_hal_displayio_display_construct(display,
+    busdisplay_busdisplay_obj_t *display = &allocate_display()->display;
+    display->base.type = &busdisplay_busdisplay_type;
+    common_hal_busdisplay_busdisplay_construct(display,
         bus,
         320, // Width
         240, // Height
@@ -81,47 +80,14 @@ void board_init(void) {
         sizeof(display_init_sequence),
         &pin_GPIO45,  // backlight pin
         NO_BRIGHTNESS_COMMAND,
-        1.0f, // brightness (ignored)
-        true, // auto_brightness
+        1.0f, // brightness
         false, // single_byte_bounds
         false, // data_as_commands
         true, // auto_refresh
         60, // native_frames_per_second
         true, // backlight_on_high
-        false); // SH1107_addressing
-
-    // USB
-    common_hal_never_reset_pin(&pin_GPIO19);
-    common_hal_never_reset_pin(&pin_GPIO20);
-
-    // Debug UART
-    #ifdef DEBUG
-    common_hal_never_reset_pin(&pin_GPIO43);
-    common_hal_never_reset_pin(&pin_GPIO44);
-    #endif
-
-    // SPI Flash and RAM
-    common_hal_never_reset_pin(&pin_GPIO26);
-    common_hal_never_reset_pin(&pin_GPIO27);
-    common_hal_never_reset_pin(&pin_GPIO28);
-    common_hal_never_reset_pin(&pin_GPIO29);
-    common_hal_never_reset_pin(&pin_GPIO30);
-    common_hal_never_reset_pin(&pin_GPIO31);
-    common_hal_never_reset_pin(&pin_GPIO32);
-    common_hal_never_reset_pin(&pin_GPIO33);
-    common_hal_never_reset_pin(&pin_GPIO34);
-    common_hal_never_reset_pin(&pin_GPIO35);
-    common_hal_never_reset_pin(&pin_GPIO36);
-    common_hal_never_reset_pin(&pin_GPIO37);
+        false, // SH1107_addressing
+        50000); // backlight pwm frequency
 }
 
-bool board_requests_safe_mode(void) {
-    return false;
-}
-
-void reset_board(void) {
-
-}
-
-void board_deinit(void) {
-}
+// Use the MP_WEAK supervisor/shared/board.c versions of routines not defined here.

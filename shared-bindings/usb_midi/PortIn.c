@@ -29,11 +29,10 @@
 #include "shared-bindings/usb_midi/PortIn.h"
 #include "shared-bindings/util.h"
 
-#include "py/ioctl.h"
+#include "py/stream.h"
 #include "py/objproperty.h"
 #include "py/runtime.h"
 #include "py/stream.h"
-#include "supervisor/shared/translate.h"
 
 //| class PortIn:
 //|     """Receives midi commands over USB"""
@@ -44,7 +43,6 @@
 //|         PortIn objects are constructed for every corresponding entry in the USB
 //|         descriptor and added to the ``usb_midi.ports`` tuple."""
 //|         ...
-//|
 
 // These are standard stream methods. Code is in py/stream.c.
 //
@@ -83,11 +81,11 @@ STATIC mp_uint_t usb_midi_portin_read(mp_obj_t self_in, void *buf_in, mp_uint_t 
 STATIC mp_uint_t usb_midi_portin_ioctl(mp_obj_t self_in, mp_uint_t request, mp_uint_t arg, int *errcode) {
     usb_midi_portin_obj_t *self = MP_OBJ_TO_PTR(self_in);
     mp_uint_t ret;
-    if (request == MP_IOCTL_POLL) {
+    if (request == MP_STREAM_POLL) {
         mp_uint_t flags = arg;
         ret = 0;
-        if ((flags & MP_IOCTL_POLL_RD) && common_hal_usb_midi_portin_bytes_available(self) > 0) {
-            ret |= MP_IOCTL_POLL_RD;
+        if ((flags & MP_STREAM_POLL_RD) && common_hal_usb_midi_portin_bytes_available(self) > 0) {
+            ret |= MP_STREAM_POLL_RD;
         }
     } else {
         *errcode = MP_EINVAL;
@@ -104,21 +102,17 @@ STATIC const mp_rom_map_elem_t usb_midi_portin_locals_dict_table[] = {
 STATIC MP_DEFINE_CONST_DICT(usb_midi_portin_locals_dict, usb_midi_portin_locals_dict_table);
 
 STATIC const mp_stream_p_t usb_midi_portin_stream_p = {
-    MP_PROTO_IMPLEMENT(MP_QSTR_protocol_stream)
     .read = usb_midi_portin_read,
     .write = NULL,
     .ioctl = usb_midi_portin_ioctl,
     .is_text = false,
 };
 
-const mp_obj_type_t usb_midi_portin_type = {
-    { &mp_type_type },
-    .flags = MP_TYPE_FLAG_EXTENDED,
-    .name = MP_QSTR_PortIn,
-    .locals_dict = (mp_obj_dict_t *)&usb_midi_portin_locals_dict,
-    MP_TYPE_EXTENDED_FIELDS(
-        .getiter = mp_identity_getiter,
-        .iternext = mp_stream_unbuffered_iter,
-        .protocol = &usb_midi_portin_stream_p,
-        ),
-};
+MP_DEFINE_CONST_OBJ_TYPE(
+    usb_midi_portin_type,
+    MP_QSTR_PortIn,
+    MP_TYPE_FLAG_ITER_IS_ITERNEXT,
+    locals_dict, &usb_midi_portin_locals_dict,
+    iter, mp_stream_unbuffered_iter,
+    protocol, &usb_midi_portin_stream_p
+    );

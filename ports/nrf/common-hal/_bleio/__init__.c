@@ -47,19 +47,19 @@ void check_nrf_error(uint32_t err_code) {
     }
     switch (err_code) {
         case NRF_ERROR_NO_MEM:
-            mp_raise_msg(&mp_type_MemoryError, translate("Nordic system firmware out of memory"));
+            mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("Nordic system firmware out of memory"));
             return;
         case NRF_ERROR_TIMEOUT:
             mp_raise_msg(&mp_type_TimeoutError, NULL);
             return;
         case NRF_ERROR_INVALID_PARAM:
-            mp_raise_ValueError(translate("Invalid BLE parameter"));
+            mp_raise_ValueError(MP_ERROR_TEXT("Invalid BLE parameter"));
             return;
         case BLE_ERROR_INVALID_CONN_HANDLE:
-            mp_raise_ConnectionError(translate("Not connected"));
+            mp_raise_ConnectionError(MP_ERROR_TEXT("Not connected"));
             return;
         default:
-            mp_raise_bleio_BluetoothError(translate("Unknown system firmware error: %04x"), err_code);
+            mp_raise_bleio_BluetoothError(MP_ERROR_TEXT("Unknown system firmware error: %04x"), err_code);
             break;
     }
 }
@@ -70,13 +70,13 @@ void check_gatt_status(uint16_t gatt_status) {
     }
     switch (gatt_status) {
         case BLE_GATT_STATUS_ATTERR_INSUF_AUTHENTICATION:
-            mp_raise_bleio_SecurityError(translate("Insufficient authentication"));
+            mp_raise_bleio_SecurityError(MP_ERROR_TEXT("Insufficient authentication"));
             return;
         case BLE_GATT_STATUS_ATTERR_INSUF_ENCRYPTION:
-            mp_raise_bleio_SecurityError(translate("Insufficient encryption"));
+            mp_raise_bleio_SecurityError(MP_ERROR_TEXT("Insufficient encryption"));
             return;
         default:
-            mp_raise_bleio_BluetoothError(translate("Unknown gatt error: 0x%04x"), gatt_status);
+            mp_raise_bleio_BluetoothError(MP_ERROR_TEXT("Unknown gatt error: 0x%04x"), gatt_status);
     }
 }
 
@@ -87,11 +87,22 @@ void check_sec_status(uint8_t sec_status) {
 
     switch (sec_status) {
         case BLE_GAP_SEC_STATUS_UNSPECIFIED:
-            mp_raise_bleio_SecurityError(translate("Unspecified issue. Can be that the pairing prompt on the other device was declined or ignored."));
+            mp_raise_bleio_SecurityError(MP_ERROR_TEXT("Unspecified issue. Can be that the pairing prompt on the other device was declined or ignored."));
             return;
         default:
-            mp_raise_bleio_SecurityError(translate("Unknown security error: 0x%04x"), sec_status);
+            mp_raise_bleio_SecurityError(MP_ERROR_TEXT("Unknown security error: 0x%04x"), sec_status);
     }
+}
+
+void bleio_user_reset() {
+    // Stop any user scanning or advertising.
+    common_hal_bleio_adapter_stop_scan(&common_hal_bleio_adapter_obj);
+    common_hal_bleio_adapter_stop_advertising(&common_hal_bleio_adapter_obj);
+
+    ble_drv_remove_heap_handlers();
+
+    // Maybe start advertising the BLE workflow.
+    supervisor_bluetooth_background();
 }
 
 // Turn off BLE on a reset or reload.
@@ -115,7 +126,7 @@ bleio_adapter_obj_t common_hal_bleio_adapter_obj;
 
 void common_hal_bleio_check_connected(uint16_t conn_handle) {
     if (conn_handle == BLE_CONN_HANDLE_INVALID) {
-        mp_raise_ConnectionError(translate("Not connected"));
+        mp_raise_ConnectionError(MP_ERROR_TEXT("Not connected"));
     }
 }
 
@@ -174,7 +185,12 @@ STATIC bool _on_gattc_read_rsp_evt(ble_evt_t *ble_evt, void *param) {
             }
             break;
         }
-
+        case BLE_GAP_EVT_DISCONNECTED: {
+            read->conn_handle = BLE_CONN_HANDLE_INVALID;
+            read->done = true;
+            return false;
+            break;
+        }
         default:
             // For debugging.
             // mp_printf(&mp_plat_print, "Unhandled characteristic event: 0x%04x\n", ble_evt->header.evt_id);
@@ -208,6 +224,8 @@ size_t common_hal_bleio_gattc_read(uint16_t handle, uint16_t conn_handle, uint8_
     while (!read_info.done) {
         RUN_BACKGROUND_TASKS;
     }
+    // Test if we were disconnected while reading
+    common_hal_bleio_check_connected(read_info.conn_handle);
 
     ble_drv_remove_event_handler(_on_gattc_read_rsp_evt, &read_info);
     check_gatt_status(read_info.status);
@@ -231,7 +249,7 @@ void common_hal_bleio_gattc_write(uint16_t handle, uint16_t conn_handle, mp_buff
         }
 
         // Write with response will return NRF_ERROR_BUSY if the response has not been received.
-        // Write without reponse will return NRF_ERROR_RESOURCES if too many writes are pending.
+        // Write without response will return NRF_ERROR_RESOURCES if too many writes are pending.
         if (err_code == NRF_ERROR_BUSY || err_code == NRF_ERROR_RESOURCES) {
             // We could wait for an event indicating the write is complete, but just retrying is easier.
             MICROPY_VM_HOOK_LOOP;

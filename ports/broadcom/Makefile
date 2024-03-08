@@ -1,35 +1,28 @@
-# Select the board to build for.
-BOARD=raspberrypi_pi4
+# This file is part of the MicroPython project, http://micropython.org/
+#
+# The MIT License (MIT)
+#
+# SPDX-FileCopyrightText: Copyright (c) 2020 Scott Shawcroft for Adafruit Industries
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
 
-ifeq ($(BOARD),)
-	$(error You must provide a BOARD parameter)
-else
-	ifeq ($(wildcard boards/$(BOARD)/.),)
-		$(error Invalid BOARD specified)
-	endif
-endif
-
-# If the build directory is not given, make it reflect the board name.
-BUILD ?= build-$(BOARD)
-
-include ../../py/mkenv.mk
-# Board-specific
-include boards/$(BOARD)/mpconfigboard.mk
-# Port-specific
-include mpconfigport.mk
-# CircuitPython-specific
-include $(TOP)/py/circuitpy_mpconfig.mk
-
-# qstr definitions (must come before including py.mk)
-QSTR_DEFS = qstrdefsport.h
-
-# include py core make definitions
-include $(TOP)/py/py.mk
-
-include $(TOP)/supervisor/supervisor.mk
-
-# Include make rules and variables common across CircuitPython builds.
-include $(TOP)/py/circuitpy_defns.mk
+include ../../py/circuitpy_mkenv.mk
 
 ifeq ($(CHIP_VARIANT), "bcm2711")
 CFLAGS += -mcpu=cortex-a72 -DBCM_VERSION=2711
@@ -65,7 +58,6 @@ SRC_C += bindings/videocore/__init__.c \
 	     boards/$(BOARD)/pins.c \
 	     background.c \
 	     common-hal/videocore/Framebuffer.c \
-	     fatfs_port.c \
 		 mphalport.c \
 		 lib/sdmmc/sdmmc_cmd.c \
 		 lib/sdmmc/sdmmc_common.c \
@@ -107,7 +99,7 @@ OBJ += $(addprefix $(BUILD)/, $(SRC_S:.s=.o))
 OBJ += $(addprefix $(BUILD)/, $(SRC_MOD:.c=.o))
 
 # BCM CLFAGS
-CFLAGS += -ffreestanding -nostartfiles -DMICROPY_HW_MCU_NAME="\"$(CHIP_VARIANT)\""
+CFLAGS += -nostartfiles -DMICROPY_HW_MCU_NAME="\"$(CHIP_VARIANT)\""
 
 
 OPTIMIZATION_FLAGS ?= -O3
@@ -115,7 +107,7 @@ CFLAGS += $(OPTIMIZATION_FLAGS)
 
 # TinyUSB defines
 CFLAGS += -DCFG_TUSB_MCU=OPT_MCU_BCM2711 -DCFG_TUD_MIDI_RX_BUFSIZE=512 \
-          -DCFG_TUD_CDC_RX_BUFSIZE=512 -DCFG_TUD_MIDI_TX_BUFSIZE=512 \
+          -DCFG_TUD_CDC_RX_BUFSIZE=640 -DCFG_TUD_MIDI_TX_BUFSIZE=512 \
           -DCFG_TUD_CDC_TX_BUFSIZE=512 -DCFG_TUD_MSC_BUFSIZE=1024
 
 #Debugging/Optimization
@@ -135,8 +127,9 @@ endif
 
 CFLAGS += $(INC) -Wall -Werror -std=gnu11 $(BASE_CFLAGS) $(CFLAGS_MOD) $(COPT) $(DISABLE_WARNINGS)
 
+$(BUILD)/lib/tlsf/tlsf.o: CFLAGS += -Wno-cast-align
 
-SRC_QSTR += $(SRC_C) $(SRC_SUPERVISOR) $(SRC_COMMON_HAL_EXPANDED) $(SRC_SHARED_MODULE_EXPANDED)
+SRC_QSTR += $(SRC_C) $(SRC_SUPERVISOR) $(SRC_COMMON_HAL_EXPANDED) $(SRC_SHARED_MODULE_EXPANDED) $(SRC_CIRCUITPY_COMMON)
 
 LDFLAGS += $(CFLAGS) -T peripherals/broadcom/link$(SUFFIX).ld -Wl,--gc-sections -Wl,-Map=$@.map # -Wl,--cref
 
@@ -150,10 +143,14 @@ all: $(BUILD)/firmware.kernel$(SUFFIX).img $(BUILD)/firmware.disk.img.zip
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
+ifeq ($(VALID_BOARD),)
+$(BUILD)/kernel$(SUFFIX).elf: invalid-board
+else
 $(BUILD)/kernel$(SUFFIX).elf: $(OBJ)
 	$(STEPECHO) "LINK $@"
 	$(Q)echo $(OBJ) > $(BUILD)/firmware.objs
-	$(Q)$(CC) -o $@ $(LDFLAGS) @$(BUILD)/firmware.objs -Wl,--start-group $(LIBS) -Wl,--end-group
+	$(Q)$(CC) -o $@ $(LDFLAGS) @$(BUILD)/firmware.objs -Wl,--print-memory-usage -Wl,--start-group $(LIBS) -Wl,--end-group
+endif
 
 $(BUILD)/kernel$(SUFFIX).img: $(BUILD)/kernel$(SUFFIX).elf
 	$(STEPECHO) "Create $@"
@@ -175,10 +172,13 @@ $(BUILD)/firmware.disk.img.zip: $(BUILD)/kernel$(SUFFIX).img
 	$(Q)zip $@ $(BUILD)/circuitpython-disk.img
 	$(Q)rm $(BUILD)/circuitpython-disk.img
 
+.PHONY: $(BUILD)/rpiboot rpiboot
+rpiboot: $(BUILD)/rpiboot
+$(BUILD)/rpiboot: $(BUILD)/kernel$(SUFFIX).img
+	mkdir -vp $@
+	cp -vf $(BUILD)/kernel$(SUFFIX).img $@/
+	cp -vfr config.txt firmware/bootcode.bin firmware/fixup* firmware/start* firmware/*.dtb $@/
+	#sed -i -e "s/BOOT_UART=0/BOOT_UART=1/" $@/bootcode.bin $@/bootcode.bin
+	echo uart_2ndstage=1 >> $@/config.txt
+
 include $(TOP)/py/mkrules.mk
-
-
-# Print out the value of a make variable.
-# https://stackoverflow.com/questions/16467718/how-to-print-out-a-variable-in-makefile
-print-%:
-	@echo $* = $($*)

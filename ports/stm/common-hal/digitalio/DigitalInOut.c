@@ -27,8 +27,6 @@
 
 #include "shared-bindings/digitalio/DigitalInOut.h"
 #include "shared-bindings/microcontroller/Pin.h"
-#include "py/runtime.h"
-#include "supervisor/shared/translate.h"
 
 // The HAL is sparse on obtaining register information, so we use the LLs here.
 #if (CPY_STM32H7)
@@ -77,7 +75,7 @@ void common_hal_digitalio_digitalinout_deinit(digitalio_digitalinout_obj_t *self
     self->pin = NULL;
 }
 
-void common_hal_digitalio_digitalinout_switch_to_input(
+digitalinout_result_t common_hal_digitalio_digitalinout_switch_to_input(
     digitalio_digitalinout_obj_t *self, digitalio_pull_t pull) {
 
     GPIO_InitTypeDef GPIO_InitStruct = {0};
@@ -88,6 +86,7 @@ void common_hal_digitalio_digitalinout_switch_to_input(
     HAL_GPIO_Init(pin_port(self->pin->port), &GPIO_InitStruct);
 
     common_hal_digitalio_digitalinout_set_pull(self, pull);
+    return DIGITALINOUT_OK;
 }
 
 digitalinout_result_t common_hal_digitalio_digitalinout_switch_to_output(
@@ -138,22 +137,23 @@ digitalio_drive_mode_t common_hal_digitalio_digitalinout_get_drive_mode(
            == LL_GPIO_OUTPUT_OPENDRAIN ? DRIVE_MODE_OPEN_DRAIN : DRIVE_MODE_PUSH_PULL;
 }
 
-void common_hal_digitalio_digitalinout_set_pull(
+digitalinout_result_t common_hal_digitalio_digitalinout_set_pull(
     digitalio_digitalinout_obj_t *self, digitalio_pull_t pull) {
 
     switch (pull) {
         case PULL_UP:
-            LL_GPIO_SetPinPull(pin_port(self->pin->port), pin_mask(self->pin->number),LL_GPIO_PULL_UP);
+            LL_GPIO_SetPinPull(pin_port(self->pin->port), pin_mask(self->pin->number), LL_GPIO_PULL_UP);
             break;
         case PULL_DOWN:
-            LL_GPIO_SetPinPull(pin_port(self->pin->port), pin_mask(self->pin->number),LL_GPIO_PULL_DOWN);
+            LL_GPIO_SetPinPull(pin_port(self->pin->port), pin_mask(self->pin->number), LL_GPIO_PULL_DOWN);
             break;
         case PULL_NONE:
-            LL_GPIO_SetPinPull(pin_port(self->pin->port), pin_mask(self->pin->number),LL_GPIO_PULL_NO);
+            LL_GPIO_SetPinPull(pin_port(self->pin->port), pin_mask(self->pin->number), LL_GPIO_PULL_NO);
             break;
         default:
             break;
     }
+    return DIGITALINOUT_OK;
 }
 
 digitalio_pull_t common_hal_digitalio_digitalinout_get_pull(

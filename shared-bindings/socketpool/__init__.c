@@ -35,8 +35,10 @@
 //| """
 //| The `socketpool` module provides sockets through a pool. The pools themselves
 //| act like CPython's `socket` module.
-//| """
 //|
+//| For more information about the `socket` module, see the CPython documentation:
+//| https://docs.python.org/3/library/socket.html
+//| """
 
 STATIC const mp_rom_map_elem_t socketpool_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_socketpool) },
@@ -52,4 +54,4 @@ const mp_obj_module_t socketpool_module = {
     .globals = (mp_obj_dict_t *)&socketpool_globals,
 };
 
-MP_REGISTER_MODULE(MP_QSTR_socketpool, socketpool_module, CIRCUITPY_SOCKETPOOL);
+MP_REGISTER_MODULE(MP_QSTR_socketpool, socketpool_module);

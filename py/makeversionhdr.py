@@ -1,18 +1,24 @@
 """
 Generate header file with macros defining MicroPython version info.
 
-This script works with Python 2.6, 2.7, 3.3 and 3.4.
+This script works with Python 3.7 and newer
 """
 
 from __future__ import print_function
 
+import argparse
 import sys
 import os
+import pathlib
 import datetime
 import subprocess
 
+# CIRCUITPY-CHANGE: use external script that can override git describe output with an
+# environment variable.
+tools_describe = str(pathlib.Path(__file__).resolve().parent.parent / "tools/describe")
 
-def get_version_info_from_git():
+
+def get_version_info_from_git(repo_path):
     # Python 2.6 doesn't have check_output, so check for that
     try:
         subprocess.check_output
@@ -23,7 +29,9 @@ def get_version_info_from_git():
     # Note: git describe doesn't work if no tag is available
     try:
         git_tag = subprocess.check_output(
-            ["git", "describe", "--tags", "--dirty", "--always", "--match", "[1-9].*"],
+            [tools_describe],
+            cwd=repo_path,
+            shell=True,
             stderr=subprocess.STDOUT,
             universal_newlines=True,
         ).strip()
@@ -37,6 +45,7 @@ def get_version_info_from_git():
     try:
         git_hash = subprocess.check_output(
             ["git", "rev-parse", "--short", "HEAD"],
+            cwd=repo_path,
             stderr=subprocess.STDOUT,
             universal_newlines=True,
         ).strip()
@@ -48,46 +57,47 @@ def get_version_info_from_git():
     try:
         # Check if there are any modified files.
         subprocess.check_call(
-            ["git", "diff", "--no-ext-diff", "--quiet", "--exit-code"], stderr=subprocess.STDOUT
+            ["git", "diff", "--no-ext-diff", "--quiet", "--exit-code"],
+            cwd=repo_path,
+            stderr=subprocess.STDOUT,
         )
         # Check if there are any staged files.
         subprocess.check_call(
-            ["git", "diff-index", "--cached", "--quiet", "HEAD", "--"], stderr=subprocess.STDOUT
+            ["git", "diff-index", "--cached", "--quiet", "HEAD", "--"],
+            cwd=repo_path,
+            stderr=subprocess.STDOUT,
         )
     except subprocess.CalledProcessError:
         git_hash += "-dirty"
     except OSError:
         return None
 
+    # CIRCUITPY-CHANGE
     # Try to extract MicroPython version from git tag
     ver = git_tag.split("-")[0].split(".")
 
     return git_tag, git_hash, ver
 
 
-def get_version_info_from_docs_conf():
-    with open(os.path.join(os.path.dirname(sys.argv[0]), "..", "conf.py")) as f:
-        for line in f:
-            if line.startswith("version = release = '"):
-                ver = line.strip().split(" = ")[2].strip("'")
-                git_tag = "v" + ver
-                ver = ver.split(".")
-                if len(ver) == 2:
-                    ver.append("0")
-                return git_tag, "<no hash>", ver
-    return None
+def cannot_determine_version():
+    raise SystemExit(
+        """Cannot determine version.
+
+CircuitPython must be built from a git clone with tags.
+If you cloned from a fork, fetch the tags from adafruit/circuitpython as follows:
+
+    make fetch-tags"""
+    )
 
 
-def make_version_header(filename):
-    # Get version info using git, with fallback to docs/conf.py
-    info = get_version_info_from_git()
+def make_version_header(repo_path, filename):
+    # Get version info using git (required)
+    info = get_version_info_from_git(repo_path)
     if info is None:
-        info = get_version_info_from_docs_conf()
-
+        cannot_determine_version()
     git_tag, git_hash, ver = info
     if len(ver) < 3:
-        ver = ("0", "0", "0")
-        version_string = git_hash
+        cannot_determine_version()
     else:
         version_string = ".".join(ver)
 
@@ -107,7 +117,9 @@ def make_version_header(filename):
 #define MICROPY_VERSION_MINOR (%s)
 #define MICROPY_VERSION_MICRO (%s)
 #define MICROPY_VERSION_STRING "%s"
-#define MICROPY_FULL_VERSION_INFO "Adafruit CircuitPython " MICROPY_GIT_TAG " on " MICROPY_BUILD_DATE "; " MICROPY_HW_BOARD_NAME " with " MICROPY_HW_MCU_NAME
+// Combined version as a 32-bit number for convenience
+#define MICROPY_VERSION (MICROPY_VERSION_MAJOR << 16 | MICROPY_VERSION_MINOR << 8 | MICROPY_VERSION_MICRO)
+#define MICROPY_FULL_VERSION_INFO "Adafruit CircuitPython " MICROPY_GIT_TAG " on " MICROPY_BUILD_DATE "; " MICROPY_BANNER_MACHINE
 """ % (
         git_tag,
         git_hash,
@@ -128,9 +140,26 @@ def make_version_header(filename):
 
     # Only write the file if we need to
     if write_file:
+        print("GEN %s" % filename)
         with open(filename, "w") as f:
             f.write(file_data)
 
 
+def main():
+    parser = argparse.ArgumentParser()
+    # makeversionheader.py lives in repo/py, so default repo_path to the
+    # parent of sys.argv[0]'s directory.
+    parser.add_argument(
+        "-r",
+        "--repo-path",
+        default=os.path.join(os.path.dirname(sys.argv[0]), ".."),
+        help="path to MicroPython Git repo to query for version",
+    )
+    parser.add_argument("dest", nargs=1, help="output file path")
+    args = parser.parse_args()
+
+    make_version_header(args.repo_path, args.dest[0])
+
+
 if __name__ == "__main__":
-    make_version_header(sys.argv[1])
+    main()

@@ -29,14 +29,10 @@
 #include <stdint.h>
 
 #include "py/mpconfig.h"
-#include "py/gc.h"
-#include "py/runtime.h"
 #include "shared-bindings/pulseio/PulseOut.h"
 #include "shared-bindings/pwmio/PWMOut.h"
-#include "supervisor/shared/translate.h"
 
 #include STM32_HAL_H
-#include "shared-bindings/microcontroller/Pin.h"
 #include "timers.h"
 
 // A single timer is shared amongst all PulseOut objects under the assumption that
@@ -103,11 +99,6 @@ STATIC void pulseout_event_handler(void) {
             start_timer();
         }
     }
-}
-
-void pulseout_reset() {
-    stm_peripherals_timer_free(tim_handle.Instance);
-    refcount = 0;
 }
 
 void common_hal_pulseio_pulseout_construct(pulseio_pulseout_obj_t *self,
@@ -180,7 +171,7 @@ void common_hal_pulseio_pulseout_send(pulseio_pulseout_obj_t *self, uint16_t *pu
 
         // // Use when debugging, or issues are irrecoverable
         // if ((supervisor_ticks_ms64() - starttime ) > timeout ) {
-        //    mp_raise_RuntimeError(translate("Error: Send Timeout"));
+        //    mp_raise_RuntimeError(MP_ERROR_TEXT("Error: Send Timeout"));
         // }
     }
     // turn off timer counter.

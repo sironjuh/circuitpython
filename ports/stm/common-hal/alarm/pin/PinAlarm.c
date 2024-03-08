@@ -26,9 +26,8 @@
 
 #include "py/runtime.h"
 
+#include "shared-bindings/alarm/__init__.h"
 #include "shared-bindings/alarm/pin/PinAlarm.h"
-#include "shared-bindings/microcontroller/__init__.h"
-#include "shared-bindings/microcontroller/Pin.h"
 
 #include "peripherals/exti.h"
 
@@ -46,10 +45,10 @@ STATIC void pin_alarm_callback(uint8_t num) {
 
 void common_hal_alarm_pin_pinalarm_construct(alarm_pin_pinalarm_obj_t *self, const mcu_pin_obj_t *pin, bool value, bool edge, bool pull) {
     if (!edge) {
-        mp_raise_NotImplementedError(translate("Only edge detection is available on this hardware"));
+        mp_raise_NotImplementedError(MP_ERROR_TEXT("Only edge detection is available on this hardware"));
     }
     if (!stm_peripherals_exti_is_free(pin->number)) {
-        mp_raise_RuntimeError(translate("Pin interrupt already in use"));
+        mp_raise_RuntimeError(MP_ERROR_TEXT("Pin interrupt already in use"));
     }
     GPIO_InitTypeDef GPIO_InitStruct = {0};
     GPIO_InitStruct.Pin = pin_mask(pin->number);
@@ -102,8 +101,9 @@ mp_obj_t alarm_pin_pinalarm_find_triggered_alarm(size_t n_alarms, const mp_obj_t
     return mp_const_none;
 }
 
-mp_obj_t alarm_pin_pinalarm_create_wakeup_alarm(void) {
-    alarm_pin_pinalarm_obj_t *alarm = m_new_obj(alarm_pin_pinalarm_obj_t);
+mp_obj_t alarm_pin_pinalarm_record_wake_alarm(void) {
+    alarm_pin_pinalarm_obj_t *const alarm = &alarm_wake_alarm.pin_alarm;
+
     alarm->base.type = &alarm_pin_pinalarm_type;
     // TODO: replace this if/when other WKUP pins are supported
     alarm->pin = &pin_PA00;
@@ -132,11 +132,11 @@ void alarm_pin_pinalarm_set_alarms(bool deep_sleep, size_t n_alarms, const mp_ob
                 // Deep sleep only wakes on a rising edge from one pin, WKUP (PA00)
                 // All pin settings are handled automatically.
                 if (alarm->pin != &pin_PA00) {
-                    mp_raise_ValueError(translate("Pin cannot wake from Deep Sleep"));
+                    mp_raise_ValueError(MP_ERROR_TEXT("Pin cannot wake from Deep Sleep"));
                 }
                 if (alarm->value == false || alarm->pull == false) {
                     // Enabling WakeUp automatically sets this, but warn anyway to set expectations
-                    mp_raise_ValueError(translate("Deep sleep pins must use a rising edge with pulldown"));
+                    mp_raise_ValueError(MP_ERROR_TEXT("Deep sleep pins must use a rising edge with pulldown"));
                 }
                 // We can't actually turn WakeUp on here, since enabling it disables EXTI,
                 // so we put it off until right before sleeping.
@@ -145,9 +145,9 @@ void alarm_pin_pinalarm_set_alarms(bool deep_sleep, size_t n_alarms, const mp_ob
                 stm_peripherals_exti_never_reset(alarm->pin->number);
             }
             if (!stm_peripherals_exti_reserve(alarm->pin->number)) {
-                mp_raise_RuntimeError(translate("Pin interrupt already in use"));
+                mp_raise_RuntimeError(MP_ERROR_TEXT("Pin interrupt already in use"));
             }
-            stm_peripherals_exti_set_callback(pin_alarm_callback,alarm->pin->number);
+            stm_peripherals_exti_set_callback(pin_alarm_callback, alarm->pin->number);
             stm_peripherals_exti_enable(alarm->pin->number);
             reserved_alarms[alarm->pin->number] = true;
         }

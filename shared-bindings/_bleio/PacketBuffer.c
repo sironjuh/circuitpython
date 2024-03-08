@@ -25,7 +25,7 @@
  */
 
 #include "py/mperrno.h"
-#include "py/ioctl.h"
+#include "py/stream.h"
 #include "py/objproperty.h"
 #include "py/runtime.h"
 #include "py/stream.h"
@@ -44,7 +44,13 @@
 //|     When we're the server, we ignore all connections besides the first to subscribe to
 //|     notifications."""
 //|
-//|     def __init__(self, characteristic: Characteristic, *, buffer_size: int, max_packet_size: Optional[int] = None) -> None:
+//|     def __init__(
+//|         self,
+//|         characteristic: Characteristic,
+//|         *,
+//|         buffer_size: int,
+//|         max_packet_size: Optional[int] = None
+//|     ) -> None:
 //|         """Monitor the given Characteristic. Each time a new value is written to the Characteristic
 //|         add the newly-written bytes to a FIFO buffer.
 //|
@@ -59,7 +65,6 @@
 //|         :param int max_packet_size: Maximum size of packets. Overrides value from the characteristic.
 //|           (Remote characteristics may not have the correct length.)"""
 //|         ...
-//|
 STATIC mp_obj_t bleio_packet_buffer_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *all_args) {
     enum { ARG_characteristic, ARG_buffer_size, ARG_max_packet_size };
     static const mp_arg_t allowed_args[] = {
@@ -73,18 +78,14 @@ STATIC mp_obj_t bleio_packet_buffer_make_new(const mp_obj_type_t *type, size_t n
 
     bleio_characteristic_obj_t *characteristic = mp_arg_validate_type(args[ARG_characteristic].u_obj, &bleio_characteristic_type, MP_QSTR_characteristic);
 
-    const mp_int_t buffer_size = args[ARG_buffer_size].u_int;
-    if (buffer_size < 1) {
-        mp_raise_ValueError_varg(translate("%q must be >= 1"), MP_QSTR_buffer_size);
-    }
+    const mp_int_t buffer_size = mp_arg_validate_int_min(args[ARG_buffer_size].u_int, 1, MP_QSTR_buffer_size);
 
     size_t max_packet_size = common_hal_bleio_characteristic_get_max_length(characteristic);
     if (args[ARG_max_packet_size].u_obj != mp_const_none) {
         max_packet_size = mp_obj_get_int(args[ARG_max_packet_size].u_obj);
     }
 
-    bleio_packet_buffer_obj_t *self = m_new_obj(bleio_packet_buffer_obj_t);
-    self->base.type = &bleio_packet_buffer_type;
+    bleio_packet_buffer_obj_t *self = mp_obj_malloc(bleio_packet_buffer_obj_t, &bleio_packet_buffer_type);
 
     common_hal_bleio_packet_buffer_construct(self, characteristic, buffer_size, max_packet_size);
 
@@ -104,7 +105,6 @@ STATIC void check_for_deinit(bleio_packet_buffer_obj_t *self) {
 //|         :return: number of bytes read and stored into ``buf``
 //|         :rtype: int"""
 //|         ...
-//|
 STATIC mp_obj_t bleio_packet_buffer_readinto(mp_obj_t self_in, mp_obj_t buffer_obj) {
     bleio_packet_buffer_obj_t *self = MP_OBJ_TO_PTR(self_in);
     check_for_deinit(self);
@@ -114,7 +114,7 @@ STATIC mp_obj_t bleio_packet_buffer_readinto(mp_obj_t self_in, mp_obj_t buffer_o
 
     mp_int_t size = common_hal_bleio_packet_buffer_readinto(self, bufinfo.buf, bufinfo.len);
     if (size < 0) {
-        mp_raise_ValueError_varg(translate("Buffer too short by %d bytes"), size * -1);
+        mp_raise_ValueError_varg(MP_ERROR_TEXT("Buffer too short by %d bytes"), size * -1);
     }
 
     return MP_OBJ_NEW_SMALL_INT(size);
@@ -130,7 +130,6 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_2(bleio_packet_buffer_readinto_obj, bleio_packet_
 //|         :return: number of bytes written. May include header bytes when packet is empty.
 //|         :rtype: int"""
 //|         ...
-//|
 // TODO: Add a kwarg `merge=False` to dictate whether subsequent writes are merged into a pending
 // one.
 STATIC mp_obj_t bleio_packet_buffer_write(mp_uint_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
@@ -165,7 +164,7 @@ STATIC mp_obj_t bleio_packet_buffer_write(mp_uint_t n_args, const mp_obj_t *pos_
         // gatts write events, which may not have been sent yet.
         //
         // IDEAL:
-        // mp_raise_ConnectionError(translate("Not connected"));
+        // mp_raise_ConnectionError(MP_ERROR_TEXT("Not connected"));
         // TEMPORARY:
         num_bytes_written = 0;
     }
@@ -185,24 +184,19 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_1(bleio_packet_buffer_deinit_obj, bleio_packet_bu
 
 //|     incoming_packet_length: int
 //|     """Maximum length in bytes of a packet we are reading."""
-//|
 STATIC mp_obj_t bleio_packet_buffer_get_incoming_packet_length(mp_obj_t self_in) {
     bleio_packet_buffer_obj_t *self = MP_OBJ_TO_PTR(self_in);
 
     mp_int_t size = common_hal_bleio_packet_buffer_get_incoming_packet_length(self);
     if (size < 0) {
-        mp_raise_ValueError(translate("No connection: length cannot be determined"));
+        mp_raise_ValueError(MP_ERROR_TEXT("No connection: length cannot be determined"));
     }
     return MP_OBJ_NEW_SMALL_INT(size);
 }
 STATIC MP_DEFINE_CONST_FUN_OBJ_1(bleio_packet_buffer_get_incoming_packet_length_obj, bleio_packet_buffer_get_incoming_packet_length);
 
-const mp_obj_property_t bleio_packet_buffer_incoming_packet_length_obj = {
-    .base.type = &mp_type_property,
-    .proxy = { (mp_obj_t)&bleio_packet_buffer_get_incoming_packet_length_obj,
-               MP_ROM_NONE,
-               MP_ROM_NONE },
-};
+MP_PROPERTY_GETTER(bleio_packet_buffer_incoming_packet_length_obj,
+    (mp_obj_t)&bleio_packet_buffer_get_incoming_packet_length_obj);
 
 //|     outgoing_packet_length: int
 //|     """Maximum length in bytes of a packet we are writing."""
@@ -212,18 +206,14 @@ STATIC mp_obj_t bleio_packet_buffer_get_outgoing_packet_length(mp_obj_t self_in)
 
     mp_int_t size = common_hal_bleio_packet_buffer_get_outgoing_packet_length(self);
     if (size < 0) {
-        mp_raise_ValueError(translate("No connection: length cannot be determined"));
+        mp_raise_ValueError(MP_ERROR_TEXT("No connection: length cannot be determined"));
     }
     return MP_OBJ_NEW_SMALL_INT(size);
 }
 STATIC MP_DEFINE_CONST_FUN_OBJ_1(bleio_packet_buffer_get_outgoing_packet_length_obj, bleio_packet_buffer_get_outgoing_packet_length);
 
-const mp_obj_property_t bleio_packet_buffer_outgoing_packet_length_obj = {
-    .base.type = &mp_type_property,
-    .proxy = { (mp_obj_t)&bleio_packet_buffer_get_outgoing_packet_length_obj,
-               MP_ROM_NONE,
-               MP_ROM_NONE },
-};
+MP_PROPERTY_GETTER(bleio_packet_buffer_outgoing_packet_length_obj,
+    (mp_obj_t)&bleio_packet_buffer_get_outgoing_packet_length_obj);
 
 STATIC const mp_rom_map_elem_t bleio_packet_buffer_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_deinit),                     MP_ROM_PTR(&bleio_packet_buffer_deinit_obj) },
@@ -239,9 +229,10 @@ STATIC const mp_rom_map_elem_t bleio_packet_buffer_locals_dict_table[] = {
 STATIC MP_DEFINE_CONST_DICT(bleio_packet_buffer_locals_dict, bleio_packet_buffer_locals_dict_table);
 
 
-const mp_obj_type_t bleio_packet_buffer_type = {
-    { &mp_type_type },
-    .name = MP_QSTR_PacketBuffer,
-    .make_new = bleio_packet_buffer_make_new,
-    .locals_dict = (mp_obj_dict_t *)&bleio_packet_buffer_locals_dict
-};
+MP_DEFINE_CONST_OBJ_TYPE(
+    bleio_packet_buffer_type,
+    MP_QSTR_PacketBuffer,
+    MP_TYPE_FLAG_HAS_SPECIAL_ACCESSORS,
+    make_new, bleio_packet_buffer_make_new,
+    locals_dict, &bleio_packet_buffer_locals_dict
+    );

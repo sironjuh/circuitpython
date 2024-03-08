@@ -32,7 +32,6 @@
 #include "py/runtime.h"
 #include "shared-bindings/audiobusio/PDMIn.h"
 #include "shared-bindings/microcontroller/Pin.h"
-#include "supervisor/shared/translate.h"
 
 #include "audio_dma.h"
 
@@ -58,31 +57,33 @@ void common_hal_audiobusio_pdmin_construct(audiobusio_pdmin_obj_t *self,
     bool mono,
     uint8_t oversample) {
     if (!(bit_depth == 16 || bit_depth == 8) || !mono || oversample != OVERSAMPLING) {
-        mp_raise_NotImplementedError(translate("Only 8 or 16 bit mono with " MP_STRINGIFY(OVERSAMPLING) "x oversampling is supported."));
+        mp_raise_NotImplementedError_varg(MP_ERROR_TEXT("Only 8 or 16 bit mono with %dx oversampling supported."), OVERSAMPLING);
     }
 
     // Use the state machine to manage pins.
     common_hal_rp2pio_statemachine_construct(&self->state_machine,
-        pdmin, sizeof(pdmin) / sizeof(pdmin[0]),
-        44100 * 32 * 2, // Clock at 44.1 khz to warm the DAC up.
+        pdmin, MP_ARRAY_SIZE(pdmin),
+        sample_rate * 32 * 2, // Frequency based on sample rate
         NULL, 0,
+        NULL, 0, // may_exec
         NULL, 1, 0, 0xffffffff, // out pin
         data_pin, 1, // in pins
         0, 0, // in pulls
         NULL, 0, 0, 0x1f, // set pins
         clock_pin, 1, 0, 0x1f, // sideset pins
-        NULL, // jump pin
+        false, // No sideset enable
+        NULL, PULL_NONE, // jump pin
         0, // wait gpio pins
         true, // exclusive pin use
         false, 32, false, // out settings
         false, // Wait for txstall
         false, 32, true, // in settings
         false, // Not user-interruptible.
-        false); // No sideset enable
-
+        0, -1, // wrap settings
+        PIO_ANY_OFFSET);
     uint32_t actual_frequency = common_hal_rp2pio_statemachine_get_frequency(&self->state_machine);
     if (actual_frequency < MIN_MIC_CLOCK) {
-        mp_raise_ValueError(translate("sampling rate out of range"));
+        mp_raise_ValueError(MP_ERROR_TEXT("sampling rate out of range"));
     }
 
     self->sample_rate = actual_frequency / oversample;
@@ -156,9 +157,9 @@ uint32_t common_hal_audiobusio_pdmin_record_to_buffer(audiobusio_pdmin_obj_t *se
     size_t output_count = 0;
     common_hal_rp2pio_statemachine_clear_rxfifo(&self->state_machine);
     // Do one read to get the mic going and throw it away.
-    common_hal_rp2pio_statemachine_readinto(&self->state_machine, (uint8_t *)samples, 2 * sizeof(uint32_t), sizeof(uint32_t));
+    common_hal_rp2pio_statemachine_readinto(&self->state_machine, (uint8_t *)samples, 2 * sizeof(uint32_t), sizeof(uint32_t), false);
     while (output_count < output_buffer_length && !common_hal_rp2pio_statemachine_get_rxstall(&self->state_machine)) {
-        common_hal_rp2pio_statemachine_readinto(&self->state_machine, (uint8_t *)samples, 2 * sizeof(uint32_t), sizeof(uint32_t));
+        common_hal_rp2pio_statemachine_readinto(&self->state_machine, (uint8_t *)samples, 2 * sizeof(uint32_t), sizeof(uint32_t), false);
         // Call filter_sample just one place so it can be inlined.
         uint16_t value = filter_sample(samples);
         if (self->bit_depth == 8) {

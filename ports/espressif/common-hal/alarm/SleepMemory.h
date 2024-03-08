@@ -24,8 +24,7 @@
  * THE SOFTWARE.
  */
 
-#ifndef MICROPY_INCLUDED_ESPRESSIF_COMMON_HAL_ALARM_SLEEPMEMORY_H
-#define MICROPY_INCLUDED_ESPRESSIF_COMMON_HAL_ALARM_SLEEPMEMORY_H
+#pragma once
 
 #include "py/obj.h"
 
@@ -42,12 +41,14 @@
 // is set. Any memory not allocated by us can be used by the ESP-IDF for heap or other purposes.
 
 // Use half of RTC_SLOW_MEM or RTC_FAST_MEM.
-#define SLEEP_MEMORY_LENGTH (4096)
+#ifdef CONFIG_IDF_TARGET_ESP32
+#define SLEEP_MEMORY_LENGTH (3 * 1024)
+#else
+#define SLEEP_MEMORY_LENGTH (4 * 1024)
+#endif
 
 typedef struct {
     mp_obj_base_t base;
 } alarm_sleep_memory_obj_t;
 
 extern void alarm_sleep_memory_reset(void);
-
-#endif // MICROPY_INCLUDED_ESPRESSIF_COMMON_HAL_ALARM_SLEEPMEMORY_H

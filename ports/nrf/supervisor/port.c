@@ -45,30 +45,27 @@
 #include "nrf_nvic.h"
 
 #include "common-hal/microcontroller/Pin.h"
-#include "common-hal/_bleio/__init__.h"
 #include "common-hal/alarm/time/TimeAlarm.h"
 #include "common-hal/analogio/AnalogIn.h"
 #include "common-hal/busio/I2C.h"
 #include "common-hal/busio/SPI.h"
 #include "common-hal/busio/UART.h"
-#include "common-hal/pulseio/PulseOut.h"
-#include "common-hal/pulseio/PulseIn.h"
-#include "common-hal/pwmio/PWMOut.h"
 #include "common-hal/rtc/RTC.h"
 #include "common-hal/neopixel_write/__init__.h"
 #include "common-hal/watchdog/WatchDogTimer.h"
 #include "common-hal/alarm/__init__.h"
 
+#include "shared-bindings/_bleio/__init__.h"
 #include "shared-bindings/microcontroller/__init__.h"
 #include "shared-bindings/rtc/__init__.h"
 
 #include "lib/tinyusb/src/device/usbd.h"
 
-#ifdef CIRCUITPY_AUDIOBUSIO
+#if CIRCUITPY_AUDIOBUSIO
 #include "common-hal/audiobusio/I2SOut.h"
 #endif
 
-#ifdef CIRCUITPY_AUDIOPWMIO
+#if CIRCUITPY_AUDIOPWMIO
 #include "common-hal/audiopwmio/PWMAudioOut.h"
 #endif
 
@@ -77,7 +74,7 @@ extern void qspi_disable(void);
 #endif
 
 static void power_warning_handler(void) {
-    reset_into_safe_mode(BROWNOUT);
+    reset_into_safe_mode(SAFE_MODE_BROWNOUT);
 }
 
 uint32_t reset_reason_saved = 0;
@@ -204,11 +201,11 @@ safe_mode_t port_init(void) {
         // If USB is connected, then the user might be editing `code.py`,
         // in which case we should reboot into Safe Mode.
         if (usb_reg & POWER_USBREGSTATUS_VBUSDETECT_Msk) {
-            return WATCHDOG_RESET;
+            return SAFE_MODE_WATCHDOG;
         }
     }
 
-    return NO_SAFE_MODE;
+    return SAFE_MODE_NONE;
 }
 
 void reset_port(void) {
@@ -226,29 +223,11 @@ void reset_port(void) {
     i2s_reset();
     #endif
 
-    #if CIRCUITPY_AUDIOPWMIO
-    audiopwmout_reset();
-    #endif
-
-
-    #if CIRCUITPY_PULSEIO
-    pulseout_reset();
-    pulsein_reset();
-    #endif
-
-    #if CIRCUITPY_PWMIO
-    pwmout_reset();
-    #endif
-
     #if CIRCUITPY_RTC
     rtc_reset();
     #endif
 
     timers_reset();
-
-    #if CIRCUITPY_BLEIO
-    bleio_reset();
-    #endif
 
     #if CIRCUITPY_WATCHDOG
     watchdog_reset();
@@ -290,15 +269,14 @@ uint32_t *port_heap_get_bottom(void) {
 }
 
 uint32_t *port_heap_get_top(void) {
-    return port_stack_get_top();
-}
-
-bool port_has_fixed_stack(void) {
-    return false;
+    return port_stack_get_limit();
 }
 
 uint32_t *port_stack_get_limit(void) {
-    return &_euninitialized;
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Warray-bounds"
+    return port_stack_get_top() - (CIRCUITPY_DEFAULT_STACK_SIZE + CIRCUITPY_EXCEPTION_STACK_SIZE) / sizeof(uint32_t);
+    #pragma GCC diagnostic pop
 }
 
 uint32_t *port_stack_get_top(void) {
@@ -403,14 +381,8 @@ void port_idle_until_interrupt(void) {
 
 extern void HardFault_Handler(void);
 void HardFault_Handler(void) {
-    reset_into_safe_mode(HARD_CRASH);
+    reset_into_safe_mode(SAFE_MODE_HARD_FAULT);
     while (true) {
         asm ("nop;");
     }
 }
-
-#if CIRCUITPY_ALARM
-// in case boards/xxx/board.c does not provide board_deinit()
-MP_WEAK void board_deinit(void) {
-}
-#endif

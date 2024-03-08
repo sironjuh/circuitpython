@@ -31,7 +31,6 @@
 
 #include "common-hal/alarm/__init__.h"
 #include "shared-bindings/microcontroller/ResetReason.h"
-#include "supervisor/shared/translate.h"
 
 #include "nrfx_saadc.h"
 #ifdef BLUETOOTH_SD
@@ -51,7 +50,7 @@ float common_hal_mcu_processor_get_temperature(void) {
     if (sd_en) {
         uint32_t err_code = sd_temp_get(&temp);
         if (err_code != NRF_SUCCESS) {
-            mp_raise_OSError_msg(translate("Cannot get temperature"));
+            mp_raise_OSError_msg(MP_ERROR_TEXT("Cannot get temperature"));
         }
         return temp / 4.0f;
     } // Fall through if SD not enabled.
@@ -72,7 +71,7 @@ uint32_t common_hal_mcu_processor_get_frequency(void) {
 }
 
 float common_hal_mcu_processor_get_voltage(void) {
-    nrf_saadc_value_t value;
+    nrf_saadc_value_t value = -1;
 
     const nrf_saadc_channel_config_t config = {
         .resistor_p = NRF_SAADC_RESISTOR_DISABLED,

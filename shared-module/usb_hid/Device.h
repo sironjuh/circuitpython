@@ -38,12 +38,13 @@ typedef struct  {
     const uint8_t *report_descriptor;
     uint8_t *in_report_buffers[CIRCUITPY_USB_HID_MAX_REPORT_IDS_PER_DESCRIPTOR];
     uint8_t *out_report_buffers[CIRCUITPY_USB_HID_MAX_REPORT_IDS_PER_DESCRIPTOR];
+    uint8_t out_report_buffers_updated[CIRCUITPY_USB_HID_MAX_REPORT_IDS_PER_DESCRIPTOR];
     uint16_t report_descriptor_length;
     uint8_t report_ids[CIRCUITPY_USB_HID_MAX_REPORT_IDS_PER_DESCRIPTOR];
     uint8_t in_report_lengths[CIRCUITPY_USB_HID_MAX_REPORT_IDS_PER_DESCRIPTOR];
     uint8_t out_report_lengths[CIRCUITPY_USB_HID_MAX_REPORT_IDS_PER_DESCRIPTOR];
-    uint8_t usage_page;
-    uint8_t usage;
+    uint16_t usage_page;
+    uint16_t usage;
     uint8_t num_report_ids;
 } usb_hid_device_obj_t;
 
@@ -52,5 +53,7 @@ extern const usb_hid_device_obj_t usb_hid_device_mouse_obj;
 extern const usb_hid_device_obj_t usb_hid_device_consumer_control_obj;
 
 void usb_hid_device_create_report_buffers(usb_hid_device_obj_t *self);
+
+extern char *custom_usb_hid_interface_name;
 
 #endif /* SHARED_MODULE_USB_HID_DEVICE_H */

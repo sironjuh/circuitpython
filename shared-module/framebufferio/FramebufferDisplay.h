@@ -31,7 +31,6 @@
 #include "py/obj.h"
 #include "py/proto.h"
 
-#include "shared-bindings/digitalio/DigitalInOut.h"
 #include "shared-bindings/displayio/Group.h"
 
 #include "shared-module/displayio/area.h"
@@ -43,7 +42,6 @@ typedef struct {
     mp_obj_t framebuffer;
     const struct _framebuffer_p_t *framebuffer_protocol;
     mp_buffer_info_t bufinfo;
-    uint64_t last_backlight_refresh;
     uint64_t last_refresh_call;
     uint16_t native_frames_per_second;
     uint16_t native_ms_per_frame;
@@ -61,15 +59,13 @@ void framebufferio_framebufferdisplay_collect_ptrs(framebufferio_framebufferdisp
 
 mp_obj_t common_hal_framebufferio_framebufferdisplay_get_framebuffer(framebufferio_framebufferdisplay_obj_t *self);
 
-typedef bool (*framebuffer_get_auto_brightness_fun)(mp_obj_t);
 typedef bool (*framebuffer_get_reverse_pixels_in_byte_fun)(mp_obj_t);
 typedef bool (*framebuffer_get_reverse_pixels_in_word_fun)(mp_obj_t);
-typedef bool (*framebuffer_set_auto_brightness_fun)(mp_obj_t, bool);
 typedef bool (*framebuffer_set_brightness_fun)(mp_obj_t, mp_float_t);
 typedef int (*framebuffer_get_bytes_per_cell_fun)(mp_obj_t);
 typedef int (*framebuffer_get_color_depth_fun)(mp_obj_t);
 typedef int (*framebuffer_get_first_pixel_offset_fun)(mp_obj_t);
-typedef int (*framebuffer_get_grayscale_fun)(mp_obj_t);
+typedef bool (*framebuffer_get_grayscale_fun)(mp_obj_t);
 typedef int (*framebuffer_get_height_fun)(mp_obj_t);
 typedef int (*framebuffer_get_native_frames_per_second_fun)(mp_obj_t);
 typedef bool (*framebuffer_get_pixels_in_byte_share_row_fun)(mp_obj_t);
@@ -105,9 +101,6 @@ typedef struct _framebuffer_p_t {
     framebuffer_get_brightness_fun get_brightness;
     framebuffer_set_brightness_fun set_brightness;
 
-    // Optional -- default is no automatic brightness control
-    framebuffer_get_auto_brightness_fun get_auto_brightness;
-    framebuffer_set_auto_brightness_fun set_auto_brightness;
 } framebuffer_p_t;
 
 #endif // MICROPY_INCLUDED_SHARED_MODULE_DISPLAYIO_FRAMEBUFFERDISPLAY_H

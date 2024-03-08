@@ -3,7 +3,7 @@
  *
  * The MIT License (MIT)
  *
- * SPDX-FileCopyrightText: Copyright (c) 2013, 2014 Damien P. George
+ * Copyright (c) 2013, 2014 Damien P. George
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -29,20 +29,22 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "py/mphal.h"
 #include "py/compile.h"
 #include "py/runtime.h"
 #include "py/repl.h"
 #include "py/gc.h"
-#include "py/gc_long_lived.h"
 #include "py/frozenmod.h"
 #include "py/mphal.h"
-#if MICROPY_HW_ENABLE_USB
+#if defined(MICROPY_HW_ENABLE_USB) && MICROPY_HW_ENABLE_USB
 #include "irq.h"
 #include "usb.h"
 #endif
 #include "shared/readline/readline.h"
 #include "shared/runtime/pyexec.h"
 #include "genhdr/mpversion.h"
+
+// CIRCUITPY-CHANGE: multiple changes for atexit(), interrupts
 
 #if CIRCUITPY_ATEXIT
 #include "shared-module/atexit/__init__.h"
@@ -55,21 +57,21 @@ int pyexec_system_exit = 0;
 STATIC bool repl_display_debugging_info = 0;
 #endif
 
-#define EXEC_FLAG_PRINT_EOF (1)
-#define EXEC_FLAG_ALLOW_DEBUGGING (2)
-#define EXEC_FLAG_IS_REPL (4)
-#define EXEC_FLAG_SOURCE_IS_RAW_CODE (8)
-#define EXEC_FLAG_SOURCE_IS_VSTR (16)
-#define EXEC_FLAG_SOURCE_IS_FILENAME (32)
-#define EXEC_FLAG_SOURCE_IS_READER (64)
-#define EXEC_FLAG_SOURCE_IS_ATEXIT (128)
+#define EXEC_FLAG_PRINT_EOF             (1 << 0)
+#define EXEC_FLAG_ALLOW_DEBUGGING       (1 << 1)
+#define EXEC_FLAG_IS_REPL               (1 << 2)
+#define EXEC_FLAG_SOURCE_IS_RAW_CODE    (1 << 3)
+#define EXEC_FLAG_SOURCE_IS_VSTR        (1 << 4)
+#define EXEC_FLAG_SOURCE_IS_FILENAME    (1 << 5)
+#define EXEC_FLAG_SOURCE_IS_READER      (1 << 6)
+#define EXEC_FLAG_SOURCE_IS_ATEXIT      (1 << 7)
 
 // parses, compiles and executes the code in the lexer
 // frees the lexer before returning
 // EXEC_FLAG_PRINT_EOF prints 2 EOF chars: 1 after normal output, 1 after exception output
 // EXEC_FLAG_ALLOW_DEBUGGING allows debugging info to be printed after executing the code
 // EXEC_FLAG_IS_REPL is used for REPL inputs (flag passed on to mp_compile)
-STATIC int parse_compile_execute(const void *source, mp_parse_input_kind_t input_kind, int exec_flags, pyexec_result_t *result) {
+STATIC int parse_compile_execute(const void *source, mp_parse_input_kind_t input_kind, mp_uint_t exec_flags, pyexec_result_t *result) {
     int ret = 0;
     #if MICROPY_REPL_INFO
     uint32_t start = 0;
@@ -93,7 +95,11 @@ STATIC int parse_compile_execute(const void *source, mp_parse_input_kind_t input
             #if MICROPY_MODULE_FROZEN_MPY
             if (exec_flags & EXEC_FLAG_SOURCE_IS_RAW_CODE) {
                 // source is a raw_code object, create the function
-                module_fun = mp_make_function_from_raw_code(source, MP_OBJ_NULL, MP_OBJ_NULL);
+                const mp_frozen_module_t *frozen = source;
+                mp_module_context_t *ctx = m_new_obj(mp_module_context_t);
+                ctx->module.globals = mp_globals_get();
+                ctx->constants = frozen->constants;
+                module_fun = mp_make_function_from_raw_code(frozen->rc, ctx, NULL);
             } else
             #endif
             {
@@ -111,22 +117,22 @@ STATIC int parse_compile_execute(const void *source, mp_parse_input_kind_t input
                 }
                 // source is a lexer, parse and compile the script
                 qstr source_name = lex->source_name;
+                // CIRCUITPY-CHANGE
+                #if MICROPY_PY___FILE__
                 if (input_kind == MP_PARSE_FILE_INPUT) {
                     mp_store_global(MP_QSTR___file__, MP_OBJ_NEW_QSTR(source_name));
                 }
+                #endif
+
                 mp_parse_tree_t parse_tree = mp_parse(lex, input_kind);
                 module_fun = mp_compile(&parse_tree, source_name, exec_flags & EXEC_FLAG_IS_REPL);
-                // Clear the parse tree because it has a heap pointer we don't need anymore.
-                *((uint32_t volatile *)&parse_tree.chunk) = 0;
                 #else
                 mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("script compilation not supported"));
                 #endif
             }
 
-            // If the code was loaded from a file it's likely to be running for a while so we'll long
-            // live it and collect any garbage before running.
+            // If the code was loaded from a file, collect any garbage before running.
             if (input_kind == MP_PARSE_FILE_INPUT) {
-                module_fun = make_obj_long_lived(module_fun, 6);
                 gc_collect();
             }
         }
@@ -166,20 +172,26 @@ STATIC int parse_compile_execute(const void *source, mp_parse_input_kind_t input
         if (exec_flags & EXEC_FLAG_PRINT_EOF) {
             mp_hal_stdout_tx_strn("\x04", 1);
         }
+
         // check for SystemExit
-        if (mp_obj_is_subclass_fast(MP_OBJ_FROM_PTR(mp_obj_get_type((mp_obj_t)nlr.ret_val)), MP_OBJ_FROM_PTR(&mp_type_SystemExit))) {
+
+        // nlr.ret_val is an exception object.
+        mp_obj_t exception_obj = (mp_obj_t)nlr.ret_val;
+
+        if (mp_obj_is_subclass_fast(MP_OBJ_FROM_PTR(mp_obj_get_type(exception_obj)), MP_OBJ_FROM_PTR(&mp_type_SystemExit))) {
             // at the moment, the value of SystemExit is unused
             ret = pyexec_system_exit;
         #if CIRCUITPY_ALARM
-        } else if (mp_obj_is_subclass_fast(MP_OBJ_FROM_PTR(mp_obj_get_type((mp_obj_t)nlr.ret_val)), &mp_type_DeepSleepRequest)) {
+        } else if (mp_obj_is_subclass_fast(MP_OBJ_FROM_PTR(mp_obj_get_type(exception_obj)), MP_OBJ_FROM_PTR(&mp_type_DeepSleepRequest))) {
             ret = PYEXEC_DEEP_SLEEP;
         #endif
+        } else if (exception_obj == MP_OBJ_FROM_PTR(&MP_STATE_VM(mp_reload_exception))) {
+            ret = PYEXEC_RELOAD;
         } else {
-            if ((mp_obj_t)nlr.ret_val != MP_OBJ_FROM_PTR(&MP_STATE_VM(mp_reload_exception))) {
-                mp_obj_print_exception(&mp_plat_print, MP_OBJ_FROM_PTR(nlr.ret_val));
-            }
+            mp_obj_print_exception(&mp_plat_print, exception_obj);
             ret = PYEXEC_EXCEPTION;
         }
+
     }
     if (result != NULL) {
         result->return_code = ret;
@@ -197,7 +209,9 @@ STATIC int parse_compile_execute(const void *source, mp_parse_input_kind_t input
                 size_t n, *values;
                 mp_obj_exception_get_traceback(return_value, &n, &values);
                 if (values != NULL) {
-                    result->exception_line = values[n - 2];
+                    result->exception_line = values[1];
+                    result->exception_filename[sizeof(result->exception_filename) - 1] = '\0';
+                    strncpy(result->exception_filename, qstr_str(values[0]), sizeof(result->exception_filename) - 1);
                 }
             }
         }
@@ -485,7 +499,7 @@ STATIC int pyexec_friendly_repl_process_char(int c) {
 
         vstr_add_byte(MP_STATE_VM(repl_line), '\n');
         repl.cont_line = true;
-        readline_note_newline("... ");
+        readline_note_newline(mp_repl_get_ps2());
         return 0;
 
     } else {
@@ -506,7 +520,7 @@ STATIC int pyexec_friendly_repl_process_char(int c) {
 
         if (mp_repl_continue_with_input(vstr_null_terminated_str(MP_STATE_VM(repl_line)))) {
             vstr_add_byte(MP_STATE_VM(repl_line), '\n');
-            readline_note_newline("... ");
+            readline_note_newline(mp_repl_get_ps2());
             return 0;
         }
 
@@ -520,7 +534,7 @@ STATIC int pyexec_friendly_repl_process_char(int c) {
         vstr_reset(MP_STATE_VM(repl_line));
         repl.cont_line = false;
         repl.paste_mode = false;
-        readline_init(MP_STATE_VM(repl_line), ">>> ");
+        readline_init(MP_STATE_VM(repl_line), mp_repl_get_ps1());
         return 0;
     }
 }
@@ -537,6 +551,8 @@ int pyexec_event_repl_process_char(int c) {
     pyexec_repl_active = 0;
     return res;
 }
+
+MP_REGISTER_ROOT_POINTER(vstr_t * repl_line);
 
 #else // MICROPY_REPL_EVENT_DRIVEN
 
@@ -593,7 +609,7 @@ raw_repl_reset:
         }
 
         int ret = parse_compile_execute(&line, MP_PARSE_FILE_INPUT, EXEC_FLAG_PRINT_EOF | EXEC_FLAG_SOURCE_IS_VSTR, NULL);
-        if (ret & PYEXEC_FORCED_EXIT) {
+        if (ret & (PYEXEC_FORCED_EXIT | PYEXEC_RELOAD)) {
             return ret;
         }
     }
@@ -630,12 +646,12 @@ friendly_repl_reset:
     for (;;) {
     input_restart:
 
-        #if MICROPY_HW_ENABLE_USB
+        #if defined(MICROPY_HW_ENABLE_USB) && MICROPY_HW_ENABLE_USB
         if (usb_vcp_is_enabled()) {
             // If the user gets to here and interrupts are disabled then
             // they'll never see the prompt, traceback etc. The USB REPL needs
             // interrupts to be enabled or no transfers occur. So we try to
-            // do the user a favor and reenable interrupts.
+            // do the user a favor and re-enable interrupts.
             if (query_irq() == IRQ_STATE_DISABLED) {
                 enable_irq(IRQ_STATE_ENABLED);
                 mp_hal_stdout_tx_str("MPY: enabling IRQs\r\n");
@@ -717,7 +733,7 @@ friendly_repl_reset:
             // got a line with non-zero length, see if it needs continuing
             while (mp_repl_continue_with_input(vstr_null_terminated_str(&line))) {
                 vstr_add_byte(&line, '\n');
-                ret = readline(&line, "... ");
+                ret = readline(&line, mp_repl_get_ps2());
                 if (ret == CHAR_CTRL_C) {
                     // cancel everything
                     mp_hal_stdout_tx_str("\r\n");
@@ -730,7 +746,7 @@ friendly_repl_reset:
         }
 
         ret = parse_compile_execute(&line, parse_input_kind, EXEC_FLAG_ALLOW_DEBUGGING | EXEC_FLAG_IS_REPL | EXEC_FLAG_SOURCE_IS_VSTR, NULL);
-        if (ret & PYEXEC_FORCED_EXIT) {
+        if (ret & (PYEXEC_FORCED_EXIT | PYEXEC_RELOAD)) {
             return ret;
         }
     }
@@ -745,7 +761,7 @@ int pyexec_file(const char *filename, pyexec_result_t *result) {
 
 int pyexec_file_if_exists(const char *filename, pyexec_result_t *result) {
     #if MICROPY_MODULE_FROZEN
-    if (mp_frozen_stat(filename) == MP_IMPORT_STAT_FILE) {
+    if (mp_find_frozen_module(filename, NULL, NULL) == MP_IMPORT_STAT_FILE) {
         return pyexec_frozen_module(filename, result);
     }
     #endif
@@ -758,7 +774,8 @@ int pyexec_file_if_exists(const char *filename, pyexec_result_t *result) {
 #if MICROPY_MODULE_FROZEN
 int pyexec_frozen_module(const char *name, pyexec_result_t *result) {
     void *frozen_data;
-    int frozen_type = mp_find_frozen_module(name, strlen(name), &frozen_data);
+    int frozen_type;
+    mp_find_frozen_module(name, &frozen_type, &frozen_data);
 
     switch (frozen_type) {
         #if MICROPY_MODULE_FROZEN_STR

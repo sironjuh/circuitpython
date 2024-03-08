@@ -92,7 +92,7 @@ void common_hal_imagecapture_parallelimagecapture_construct(imagecapture_paralle
 
     for (int i = 1; i < data_count; i++) {
         if (data_pins[i] - data_pins[0] != i) {
-            mp_raise_RuntimeError(translate("Pins must be sequential"));
+            mp_raise_RuntimeError(MP_ERROR_TEXT("Pins must be sequential"));
         }
     }
 
@@ -102,6 +102,7 @@ void common_hal_imagecapture_parallelimagecapture_construct(imagecapture_paralle
         imagecapture_code, MP_ARRAY_SIZE(imagecapture_code),
         common_hal_mcu_processor_get_frequency(), // full speed (4 instructions per loop -> max pclk 30MHz @ 120MHz)
         0, 0, // init
+        NULL, 0, // may_exec
         NULL, 0, 0, 0, // out pins
         pin_from_number(data_pins[0]), data_count, // in pins
         0, 0, // in pulls
@@ -112,19 +113,15 @@ void common_hal_imagecapture_parallelimagecapture_construct(imagecapture_paralle
         NULL, 0, 0, 0, // sideset pins
         #endif
         false, // No sideset enable
-        NULL, // jump pin
+        NULL, PULL_NONE, // jump pin
         (1 << vertical_sync->number) | (1 << horizontal_reference->number) | (1 << data_clock->number), // wait gpio pins
         true, // exclusive pin use
         false, 32, false, // out settings
         false, // wait for txstall
         true, 32, true,  // in settings
-        false); // Not user-interruptible.
-
-
-    PIO pio = self->state_machine.pio;
-    uint8_t pio_index = pio_get_index(pio);
-    uint sm = self->state_machine.state_machine;
-    rp2pio_statemachine_set_wrap(&self->state_machine, 2, 5);
+        false, // Not user-interruptible.
+        2, 5, // wrap settings
+        PIO_ANY_OFFSET);
 }
 
 void common_hal_imagecapture_parallelimagecapture_deinit(imagecapture_parallelimagecapture_obj_t *self) {
@@ -153,7 +150,7 @@ void common_hal_imagecapture_parallelimagecapture_singleshot_capture(imagecaptur
     pio_sm_exec(pio, sm, pio_encode_jmp(offset));
     pio_sm_set_enabled(pio, sm, true);
 
-    common_hal_rp2pio_statemachine_readinto(&self->state_machine, bufinfo.buf, bufinfo.len, 4);
+    common_hal_rp2pio_statemachine_readinto(&self->state_machine, bufinfo.buf, bufinfo.len, 4, false);
 
     pio_sm_set_enabled(pio, sm, false);
 }

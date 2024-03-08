@@ -57,8 +57,14 @@
 //| This example will initialize the the device, read
 //| :py:data:`~analogio.AnalogIn.value` and then
 //| :py:meth:`~analogio.AnalogIn.deinit` the hardware. The last step is optional
-//| because CircuitPython will do it automatically after the program finishes."""
+//| because CircuitPython will do it automatically after the program finishes.
 //|
+//| For the essentials of `analogio`, see the `CircuitPython Essentials
+//| Learn guide <https://learn.adafruit.com/circuitpython-essentials/circuitpython-analog-in>`_
+//|
+//| For more information on using `analogio`, see `this additional Learn guide
+//| <https://learn.adafruit.com/circuitpython-basics-analog-inputs-and-outputs>`_
+//| """
 
 STATIC const mp_rom_map_elem_t analogio_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_analogio) },
@@ -73,4 +79,4 @@ const mp_obj_module_t analogio_module = {
     .globals = (mp_obj_dict_t *)&analogio_module_globals,
 };
 
-MP_REGISTER_MODULE(MP_QSTR_analogio, analogio_module, CIRCUITPY_ANALOGIO);
+MP_REGISTER_MODULE(MP_QSTR_analogio, analogio_module);

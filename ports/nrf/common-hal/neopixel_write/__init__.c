@@ -53,13 +53,16 @@
 // The PWM starts the duty cycle in LOW. To start with HIGH we
 // need to set the 15th bit on each register.
 
+// *** CircuitPython: Use WS2812 for all, works with https://adafru.it/5225 and everything else
+// ***
+
 // WS2812 (rev A) timing is 0.35 and 0.7us
-// #define MAGIC_T0H               5UL | (0x8000) // 0.3125us
-// #define MAGIC_T1H              12UL | (0x8000) // 0.75us
+#define MAGIC_T0H               5UL | (0x8000) // 0.3125us
+#define MAGIC_T1H              12UL | (0x8000) // 0.75us
 
 // WS2812B (rev B) timing is 0.4 and 0.8 us
-#define MAGIC_T0H               6UL | (0x8000) // 0.375us
-#define MAGIC_T1H              13UL | (0x8000) // 0.8125us
+// #define MAGIC_T0H               6UL | (0x8000) // 0.375us
+// #define MAGIC_T1H              13UL | (0x8000) // 0.8125us
 #define CTOPVAL                20UL            // 1.25us
 
 // ---------- END Constants for the EasyDMA implementation -------------
@@ -330,3 +333,5 @@ void common_hal_neopixel_write(const digitalio_digitalinout_obj_t *digitalinout,
     // Update the next start.
     next_start_raw_ticks = port_get_raw_ticks(NULL) + 4;
 }
+
+MP_REGISTER_ROOT_POINTER(uint16_t * pixels_pattern_heap);

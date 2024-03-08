@@ -25,6 +25,7 @@
  */
 
 #include "shared-bindings/busio/SPI.h"
+#include "shared-bindings/microcontroller/Pin.h"
 #include "py/mperrno.h"
 #include "py/runtime.h"
 
@@ -33,7 +34,6 @@
 
 #include "supervisor/board.h"
 #include "common-hal/busio/__init__.h"
-#include "common-hal/microcontroller/Pin.h"
 
 #include "hal/include/hal_gpio.h"
 #include "hal/include/hal_spi_m_sync.h"
@@ -44,7 +44,7 @@
 
 void common_hal_busio_spi_construct(busio_spi_obj_t *self,
     const mcu_pin_obj_t *clock, const mcu_pin_obj_t *mosi,
-    const mcu_pin_obj_t *miso) {
+    const mcu_pin_obj_t *miso, bool half_duplex) {
     Sercom *sercom = NULL;
     uint8_t sercom_index;
     uint32_t clock_pinmux = 0;
@@ -56,6 +56,10 @@ void common_hal_busio_spi_construct(busio_spi_obj_t *self,
     uint8_t mosi_pad = 0;
     uint8_t miso_pad = 0;
     uint8_t dopo = 255;
+
+    if (half_duplex) {
+        mp_raise_NotImplementedError_varg(MP_ERROR_TEXT("%q"), MP_QSTR_half_duplex);
+    }
 
     // Ensure the object starts in its deinit state.
     self->clock_pin = NO_PIN;
@@ -129,7 +133,7 @@ void common_hal_busio_spi_construct(busio_spi_obj_t *self,
         }
     }
     if (sercom == NULL) {
-        mp_raise_ValueError(translate("Invalid pins"));
+        raise_ValueError_invalid_pins();
     }
 
     // Set up SPI clocks on SERCOM.
@@ -263,7 +267,21 @@ bool common_hal_busio_spi_write(busio_spi_obj_t *self,
     }
     int32_t status;
     if (len >= 16) {
-        status = sercom_dma_write(self->spi_desc.dev.prvt, data, len);
+        size_t bytes_remaining = len;
+
+        // Maximum DMA transfer is 65535
+        while (1) {
+            size_t to_send = (bytes_remaining > 65535) ? 65535 : bytes_remaining;
+            status = sercom_dma_write(self->spi_desc.dev.prvt, data + (len - bytes_remaining), to_send);
+            bytes_remaining -= to_send;
+            if (bytes_remaining > 0) {
+                // Multi-part transfer; let other things run before doing the next chunk.
+                RUN_BACKGROUND_TASKS;
+            } else {
+                // All done.
+                break;
+            }
+        }
     } else {
         struct io_descriptor *spi_io;
         spi_m_sync_get_io_descriptor(&self->spi_desc, &spi_io);

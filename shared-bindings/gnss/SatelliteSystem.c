@@ -9,7 +9,6 @@
 //|
 //|     def __init__(self) -> None:
 //|         """Enum-like class to define the satellite system type."""
-//|
 //|     GPS: SatelliteSystem
 //|     """Global Positioning System."""
 //|
@@ -105,9 +104,10 @@ STATIC void gnss_satellitesystem_print(const mp_print_t *print, mp_obj_t self_in
     mp_printf(print, "%q.%q.%q", MP_QSTR_gnss, MP_QSTR_SatelliteSystem, system);
 }
 
-const mp_obj_type_t gnss_satellitesystem_type = {
-    { &mp_type_type },
-    .name = MP_QSTR_SatelliteSystem,
-    .print = gnss_satellitesystem_print,
-    .locals_dict = (mp_obj_t)&gnss_satellitesystem_locals_dict,
-};
+MP_DEFINE_CONST_OBJ_TYPE(
+    gnss_satellitesystem_type,
+    MP_QSTR_SatelliteSystem,
+    MP_TYPE_FLAG_NONE,
+    print, gnss_satellitesystem_print,
+    locals_dict, &gnss_satellitesystem_locals_dict
+    );

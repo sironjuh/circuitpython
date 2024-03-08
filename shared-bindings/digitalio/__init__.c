@@ -71,8 +71,14 @@
 //|       led.value = True
 //|       time.sleep(0.1)
 //|       led.value = False
-//|       time.sleep(0.1)"""
+//|       time.sleep(0.1)
 //|
+//| For the essentials of `digitalio`, see the `CircuitPython Essentials
+//| Learn guide <https://learn.adafruit.com/circuitpython-essentials/circuitpython-digital-in-out>`_
+//|
+//| For more information on using `digitalio`, see `this additional Learn guide
+//| <https://learn.adafruit.com/circuitpython-digital-inputs-and-outputs>`_
+//| """
 
 STATIC const mp_rom_map_elem_t digitalio_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_digitalio) },
@@ -91,4 +97,4 @@ const mp_obj_module_t digitalio_module = {
     .globals = (mp_obj_dict_t *)&digitalio_module_globals,
 };
 
-MP_REGISTER_MODULE(MP_QSTR_digitalio, digitalio_module, CIRCUITPY_DIGITALIO);
+MP_REGISTER_MODULE(MP_QSTR_digitalio, digitalio_module);

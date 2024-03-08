@@ -44,7 +44,6 @@
 //| are no longer needed if the program continues after use. To do so, either
 //| call :py:meth:`!deinit` or use a context manager. See
 //| :ref:`lifetime-and-contextmanagers` for more info."""
-//|
 
 STATIC const mp_rom_map_elem_t pulseio_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_pulseio) },
@@ -59,4 +58,4 @@ const mp_obj_module_t pulseio_module = {
     .globals = (mp_obj_dict_t *)&pulseio_module_globals,
 };
 
-MP_REGISTER_MODULE(MP_QSTR_pulseio, pulseio_module, CIRCUITPY_PULSEIO);
+MP_REGISTER_MODULE(MP_QSTR_pulseio, pulseio_module);

@@ -32,8 +32,6 @@
 #include "shared-bindings/pwmio/PWMOut.h"
 #include "shared-bindings/microcontroller/Processor.h"
 
-#include "supervisor/shared/translate.h"
-
 #include "src/rp2040/hardware_regs/include/hardware/platform_defs.h"
 #include "src/rp2_common/hardware_clocks/include/hardware/clocks.h"
 #include "src/rp2_common/hardware_gpio/include/hardware/gpio.h"
@@ -85,43 +83,8 @@ void pwmio_release_slice_ab_channels(uint8_t slice) {
     channel_use &= ~channel_mask;
 }
 
-void pwmout_never_reset(uint8_t slice, uint8_t ab_channel) {
-    never_reset_channel |= _mask(slice, ab_channel);
-}
-
-void pwmout_reset_ok(uint8_t slice, uint8_t ab_channel) {
-    never_reset_channel &= ~_mask(slice, ab_channel);
-}
-
 void common_hal_pwmio_pwmout_never_reset(pwmio_pwmout_obj_t *self) {
-    pwmout_never_reset(self->slice, self->ab_channel);
-
     never_reset_pin_number(self->pin->number);
-}
-
-void common_hal_pwmio_pwmout_reset_ok(pwmio_pwmout_obj_t *self) {
-    pwmout_reset_ok(self->slice, self->ab_channel);
-}
-
-void pwmout_reset(void) {
-    // Reset all slices
-    for (size_t slice = 0; slice < NUM_PWM_SLICES; slice++) {
-        bool reset = true;
-        for (size_t ab_channel = 0; ab_channel < AB_CHANNELS_PER_SLICE; ab_channel++) {
-            uint32_t channel_use_mask = _mask(slice, ab_channel);
-            if ((never_reset_channel & channel_use_mask) != 0) {
-                reset = false;
-                continue;
-            }
-            channel_use &= ~channel_use_mask;
-        }
-        if (!reset) {
-            continue;
-        }
-        pwm_set_enabled(slice, false);
-        target_slice_frequencies[slice] = 0;
-        slice_variable_frequency &= ~(1 << slice);
-    }
 }
 
 pwmout_result_t pwmout_allocate(uint8_t slice, uint8_t ab_channel, bool variable_frequency, uint32_t frequency) {
@@ -129,21 +92,21 @@ pwmout_result_t pwmout_allocate(uint8_t slice, uint8_t ab_channel, bool variable
 
     // Check the channel first.
     if ((channel_use & channel_use_mask) != 0) {
-        return PWMOUT_ALL_TIMERS_ON_PIN_IN_USE;
+        return PWMOUT_INTERNAL_RESOURCES_IN_USE;
     }
     // Now check if the slice is in use and if we can share with it.
     if (target_slice_frequencies[slice] > 0) {
         // If we want to change frequency then we can't share.
         if (variable_frequency) {
-            return PWMOUT_ALL_TIMERS_ON_PIN_IN_USE;
+            return PWMOUT_VARIABLE_FREQUENCY_NOT_AVAILABLE;
         }
         // If the other user wants a variable frequency then we can't share either.
         if ((slice_variable_frequency & (1 << slice)) != 0) {
-            return PWMOUT_ALL_TIMERS_ON_PIN_IN_USE;
+            return PWMOUT_INTERNAL_RESOURCES_IN_USE;
         }
         // If we're both fixed frequency but we don't match target frequencies then we can't share.
         if (target_slice_frequencies[slice] != frequency) {
-            return PWMOUT_ALL_TIMERS_ON_PIN_IN_USE;
+            return PWMOUT_INVALID_FREQUENCY_ON_PIN;
         }
     }
 
@@ -236,14 +199,6 @@ extern void common_hal_pwmio_pwmout_set_duty_cycle(pwmio_pwmout_obj_t *self, uin
     }
     // compare_count is the CC register value, which should be TOP+1 for 100% duty cycle.
     pwm_set_chan_level(self->slice, self->ab_channel, compare_count);
-    // Wait for wrap so that we know our new cc value has been applied. Clear
-    // the internal interrupt and then wait for it to be set. Worst case, we
-    // wait a full cycle.
-    pwm_hw->intr = 1 << self->slice;
-    while ((pwm_hw->en & (1 << self->slice)) != 0 &&
-           (pwm_hw->intr & (1 << self->slice)) == 0 &&
-           !mp_hal_is_interrupted()) {
-    }
 }
 
 uint16_t common_hal_pwmio_pwmout_get_duty_cycle(pwmio_pwmout_obj_t *self) {
@@ -259,7 +214,7 @@ void pwmio_pwmout_set_top(pwmio_pwmout_obj_t *self, uint16_t top) {
 
 void common_hal_pwmio_pwmout_set_frequency(pwmio_pwmout_obj_t *self, uint32_t frequency) {
     if (frequency == 0 || frequency > (common_hal_mcu_processor_get_frequency() / 2)) {
-        mp_raise_ValueError(translate("Invalid PWM frequency"));
+        mp_arg_error_invalid(MP_QSTR_frequency);
     }
 
     target_slice_frequencies[self->slice] = frequency;

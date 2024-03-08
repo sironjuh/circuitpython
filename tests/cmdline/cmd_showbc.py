@@ -15,9 +15,9 @@ def f():
     c = [1, 2]
     d = {1, 2}
     e = {}
-    f = {1: 2}
-    g = "a"
-    h = b"a"
+    f = {1:2}
+    g = 'a'
+    h = b'a'
 
     # unary/binary ops
     i = 1
@@ -40,7 +40,7 @@ def f():
     # slice
     a = b[::]
 
-    # sequenc unpacking
+    # sequence unpacking
     a, b = c
     a, *a = a
 
@@ -59,7 +59,7 @@ def f():
     # comprehensions
     a = (b for c in d if e)
     a = [b for c in d if e]
-    a = {b: b for c in d if e}
+    a = {b:b for c in d if e}
 
     # function calls
     a()
@@ -108,10 +108,8 @@ def f():
 
     # closed over variables
     x = 1
-
     def closure():
-        nonlocal x
-        a = x + 1
+        nonlocal x; a = x + 1
         x = 1
         del x
 
@@ -121,20 +119,18 @@ def f():
     #from sys import * # tested at module scope
 
     # raise
-    raise
-    raise 1
+    if a: raise
+    if a: raise 1
 
     # return
-    return
-    return 1
-
+    if a: return
+    if a: return 1
 
 # function with lots of locals
 def f():
     l1 = l2 = l3 = l4 = l5 = l6 = l7 = l8 = l9 = l10 = 1
     m1 = m2 = m3 = m4 = m5 = m6 = m7 = m8 = m9 = m10 = 2
     l10 + m10
-
 
 # functions with default args
 def f(a=1):
@@ -143,18 +139,15 @@ def f(a=1):
     def f(b=2):
         return b + a
 
-
 # function which yields
 def f():
     yield
     yield 1
     yield from 1
 
-
 # class
 class Class:
     pass
-
 
 # delete name
 del Class

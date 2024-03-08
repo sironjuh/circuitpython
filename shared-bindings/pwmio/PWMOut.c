@@ -33,7 +33,6 @@
 #include "shared-bindings/microcontroller/Pin.h"
 #include "shared-bindings/pwmio/PWMOut.h"
 #include "shared-bindings/util.h"
-#include "supervisor/shared/translate.h"
 
 
 void common_hal_pwmio_pwmout_raise_error(pwmout_result_t result) {
@@ -41,37 +40,58 @@ void common_hal_pwmio_pwmout_raise_error(pwmout_result_t result) {
         case PWMOUT_OK:
             break;
         case PWMOUT_INVALID_PIN:
-            mp_raise_ValueError(translate("Invalid pin"));
+            raise_ValueError_invalid_pin();
             break;
         case PWMOUT_INVALID_FREQUENCY:
-            mp_raise_ValueError(translate("Invalid PWM frequency"));
+            mp_arg_error_invalid(MP_QSTR_frequency);
             break;
         case PWMOUT_INVALID_FREQUENCY_ON_PIN:
-            mp_raise_ValueError(translate("Frequency must match existing PWMOut using this timer"));
+            mp_arg_error_invalid(MP_QSTR_frequency);
             break;
         case PWMOUT_VARIABLE_FREQUENCY_NOT_AVAILABLE:
-            mp_raise_ValueError(translate("Cannot vary frequency on a timer that is already in use"));
+            mp_arg_error_invalid(MP_QSTR_variable_frequency);
             break;
-        case PWMOUT_ALL_TIMERS_ON_PIN_IN_USE:
-            mp_raise_ValueError(translate("All timers for this pin are in use"));
-            break;
-        case PWMOUT_ALL_TIMERS_IN_USE:
-            mp_raise_RuntimeError(translate("All timers in use"));
-            break;
-        case PWMOUT_ALL_CHANNELS_IN_USE:
-            mp_raise_RuntimeError(translate("All channels in use"));
+        case PWMOUT_INTERNAL_RESOURCES_IN_USE:
+            mp_raise_RuntimeError(MP_ERROR_TEXT("Internal resource(s) in use"));
             break;
         default:
         case PWMOUT_INITIALIZATION_ERROR:
-            mp_raise_RuntimeError(translate("Could not start PWM"));
+            mp_raise_RuntimeError(MP_ERROR_TEXT("Internal error"));
             break;
     }
 }
 
 //| class PWMOut:
-//|     """Output a Pulse Width Modulated signal on a given pin."""
+//|     """Output a Pulse Width Modulated signal on a given pin.
 //|
-//|     def __init__(self, pin: microcontroller.Pin, *, duty_cycle: int = 0, frequency: int = 500, variable_frequency: bool = False) -> None:
+//|     .. note:: The exact frequencies possible depend on the specific microcontroller.
+//|       If the requested frequency is within the available range, one of the two
+//|       nearest possible frequencies to the requested one is selected.
+//|
+//|       If the requested frequency is outside the range, either (A) a ValueError
+//|       may be raised or (B) the highest or lowest frequency is selected. This
+//|       behavior is microcontroller-dependent, and may depend on whether it's the
+//|       upper or lower bound that is exceeded.
+//|
+//|       In any case, the actual frequency (rounded to 1Hz) is available in the
+//|       ``frequency`` property after construction.
+//|
+//|     .. note:: The frequency is calculated based on a nominal CPU frequency.
+//|       However, depending on the board, the error between the nominal and
+//|       actual CPU frequency can be large (several hundred PPM in the case of
+//|       crystal oscillators and up to ten percent in the case of RC
+//|       oscillators)
+//|
+//|     """
+//|
+//|     def __init__(
+//|         self,
+//|         pin: microcontroller.Pin,
+//|         *,
+//|         duty_cycle: int = 0,
+//|         frequency: int = 500,
+//|         variable_frequency: bool = False
+//|     ) -> None:
 //|         """Create a PWM object associated with the given pin. This allows you to
 //|         write PWM signals out on the given pin. Frequency is fixed after init
 //|         unless ``variable_frequency`` is True.
@@ -127,9 +147,10 @@ void common_hal_pwmio_pwmout_raise_error(pwmout_result_t result) {
 //|           pwm = pwmio.PWMOut(board.D13, duty_cycle=2 ** 15, frequency=440, variable_frequency=True)
 //|           time.sleep(0.2)
 //|           pwm.frequency = 880
-//|           time.sleep(0.1)"""
-//|         ...
+//|           time.sleep(0.1)
 //|
+//|         """
+//|         ...
 STATIC mp_obj_t pwmio_pwmout_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *args) {
     enum { ARG_pin, ARG_duty_cycle, ARG_frequency, ARG_variable_frequency };
     static const mp_arg_t allowed_args[] = {
@@ -141,14 +162,14 @@ STATIC mp_obj_t pwmio_pwmout_make_new(const mp_obj_type_t *type, size_t n_args, 
     mp_arg_val_t parsed_args[MP_ARRAY_SIZE(allowed_args)];
     mp_arg_parse_all_kw_array(n_args, n_kw, args, MP_ARRAY_SIZE(allowed_args), allowed_args, parsed_args);
 
-    const mcu_pin_obj_t *pin = validate_obj_is_free_pin(parsed_args[ARG_pin].u_obj);
+    const mcu_pin_obj_t *pin = validate_obj_is_free_pin(parsed_args[ARG_pin].u_obj, MP_QSTR_pin);
 
     uint16_t duty_cycle = parsed_args[ARG_duty_cycle].u_int;
     uint32_t frequency = parsed_args[ARG_frequency].u_int;
     bool variable_frequency = parsed_args[ARG_variable_frequency].u_bool;
 
     // create PWM object from the given pin
-    pwmio_pwmout_obj_t *self = m_new_obj(pwmio_pwmout_obj_t);
+    pwmio_pwmout_obj_t *self = m_new_obj_with_finaliser(pwmio_pwmout_obj_t);
     self->base.type = &pwmio_pwmout_type;
     pwmout_result_t result = common_hal_pwmio_pwmout_construct(self, pin, duty_cycle, frequency, variable_frequency);
     common_hal_pwmio_pwmout_raise_error(result);
@@ -159,7 +180,6 @@ STATIC mp_obj_t pwmio_pwmout_make_new(const mp_obj_type_t *type, size_t n_args, 
 //|     def deinit(self) -> None:
 //|         """Deinitialises the PWMOut and releases any hardware resources for reuse."""
 //|         ...
-//|
 STATIC mp_obj_t pwmio_pwmout_deinit(mp_obj_t self_in) {
     pwmio_pwmout_obj_t *self = MP_OBJ_TO_PTR(self_in);
     common_hal_pwmio_pwmout_deinit(self);
@@ -176,14 +196,12 @@ STATIC void check_for_deinit(pwmio_pwmout_obj_t *self) {
 //|     def __enter__(self) -> PWMOut:
 //|         """No-op used by Context Managers."""
 //|         ...
-//|
 //  Provided by context manager helper.
 
 //|     def __exit__(self) -> None:
 //|         """Automatically deinitializes the hardware when exiting a context. See
 //|         :ref:`lifetime-and-contextmanagers` for more info."""
 //|         ...
-//|
 STATIC mp_obj_t pwmio_pwmout_obj___exit__(size_t n_args, const mp_obj_t *args) {
     (void)n_args;
     common_hal_pwmio_pwmout_deinit(args[0]);
@@ -200,7 +218,6 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(pwmio_pwmout___exit___obj, 4, 4, pwmi
 //|     representation for duty cycle might have less than 16 bits of resolution.
 //|     Reading this property will return the value from the internal representation,
 //|     so it may differ from the value set."""
-//|
 STATIC mp_obj_t pwmio_pwmout_obj_get_duty_cycle(mp_obj_t self_in) {
     pwmio_pwmout_obj_t *self = MP_OBJ_TO_PTR(self_in);
     check_for_deinit(self);
@@ -212,20 +229,17 @@ STATIC mp_obj_t pwmio_pwmout_obj_set_duty_cycle(mp_obj_t self_in, mp_obj_t duty_
     pwmio_pwmout_obj_t *self = MP_OBJ_TO_PTR(self_in);
     check_for_deinit(self);
     mp_int_t duty = mp_obj_get_int(duty_cycle);
-    if (duty < 0 || duty > 0xffff) {
-        mp_raise_ValueError(translate("PWM duty_cycle must be between 0 and 65535 inclusive (16 bit resolution)"));
-    }
+
+    mp_arg_validate_int_range(duty, 0, 0xffff, MP_QSTR_duty_cycle);
+
     common_hal_pwmio_pwmout_set_duty_cycle(self, duty);
     return mp_const_none;
 }
 MP_DEFINE_CONST_FUN_OBJ_2(pwmio_pwmout_set_duty_cycle_obj, pwmio_pwmout_obj_set_duty_cycle);
 
-const mp_obj_property_t pwmio_pwmout_duty_cycle_obj = {
-    .base.type = &mp_type_property,
-    .proxy = {(mp_obj_t)&pwmio_pwmout_get_duty_cycle_obj,
-              (mp_obj_t)&pwmio_pwmout_set_duty_cycle_obj,
-              MP_ROM_NONE},
-};
+MP_PROPERTY_GETSET(pwmio_pwmout_duty_cycle_obj,
+    (mp_obj_t)&pwmio_pwmout_get_duty_cycle_obj,
+    (mp_obj_t)&pwmio_pwmout_set_duty_cycle_obj);
 
 //|     frequency: int
 //|     """32 bit value that dictates the PWM frequency in Hertz (cycles per
@@ -235,7 +249,8 @@ const mp_obj_property_t pwmio_pwmout_duty_cycle_obj = {
 //|     for the PWM's duty cycle may need to be recalculated when the frequency
 //|     changes. In these cases, the duty cycle is automatically recalculated
 //|     from the original duty cycle value. This should happen without any need
-//|     to manually re-set the duty cycle."""
+//|     to manually re-set the duty cycle. However, an output glitch may occur during the adjustment.
+//|     """
 //|
 STATIC mp_obj_t pwmio_pwmout_obj_get_frequency(mp_obj_t self_in) {
     pwmio_pwmout_obj_t *self = MP_OBJ_TO_PTR(self_in);
@@ -248,29 +263,25 @@ STATIC mp_obj_t pwmio_pwmout_obj_set_frequency(mp_obj_t self_in, mp_obj_t freque
     pwmio_pwmout_obj_t *self = MP_OBJ_TO_PTR(self_in);
     check_for_deinit(self);
     if (!common_hal_pwmio_pwmout_get_variable_frequency(self)) {
-        mp_raise_AttributeError(translate(
-            "PWM frequency not writable when variable_frequency is False on "
-            "construction."));
+        mp_raise_msg_varg(&mp_type_AttributeError, MP_ERROR_TEXT("Invalid %q"), MP_QSTR_variable_frequency);
     }
     mp_int_t freq = mp_obj_get_int(frequency);
     if (freq == 0) {
-        mp_raise_ValueError(translate("Invalid PWM frequency"));
+        mp_arg_error_invalid(MP_QSTR_frequency);
     }
     common_hal_pwmio_pwmout_set_frequency(self, freq);
     return mp_const_none;
 }
 MP_DEFINE_CONST_FUN_OBJ_2(pwmio_pwmout_set_frequency_obj, pwmio_pwmout_obj_set_frequency);
 
-const mp_obj_property_t pwmio_pwmout_frequency_obj = {
-    .base.type = &mp_type_property,
-    .proxy = {(mp_obj_t)&pwmio_pwmout_get_frequency_obj,
-              (mp_obj_t)&pwmio_pwmout_set_frequency_obj,
-              MP_ROM_NONE},
-};
+MP_PROPERTY_GETSET(pwmio_pwmout_frequency_obj,
+    (mp_obj_t)&pwmio_pwmout_get_frequency_obj,
+    (mp_obj_t)&pwmio_pwmout_set_frequency_obj);
 
 STATIC const mp_rom_map_elem_t pwmio_pwmout_locals_dict_table[] = {
     // Methods
     { MP_ROM_QSTR(MP_QSTR_deinit), MP_ROM_PTR(&pwmio_pwmout_deinit_obj) },
+    { MP_ROM_QSTR(MP_QSTR___del__), MP_ROM_PTR(&pwmio_pwmout_deinit_obj) },
     { MP_ROM_QSTR(MP_QSTR___enter__), MP_ROM_PTR(&default___enter___obj) },
     { MP_ROM_QSTR(MP_QSTR___exit__), MP_ROM_PTR(&pwmio_pwmout___exit___obj) },
 
@@ -282,9 +293,10 @@ STATIC const mp_rom_map_elem_t pwmio_pwmout_locals_dict_table[] = {
 };
 STATIC MP_DEFINE_CONST_DICT(pwmio_pwmout_locals_dict, pwmio_pwmout_locals_dict_table);
 
-const mp_obj_type_t pwmio_pwmout_type = {
-    { &mp_type_type },
-    .name = MP_QSTR_PWMOut,
-    .make_new = pwmio_pwmout_make_new,
-    .locals_dict = (mp_obj_dict_t *)&pwmio_pwmout_locals_dict,
-};
+MP_DEFINE_CONST_OBJ_TYPE(
+    pwmio_pwmout_type,
+    MP_QSTR_PWMOut,
+    MP_TYPE_FLAG_HAS_SPECIAL_ACCESSORS,
+    make_new, pwmio_pwmout_make_new,
+    locals_dict, &pwmio_pwmout_locals_dict
+    );

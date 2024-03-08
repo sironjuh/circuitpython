@@ -29,11 +29,9 @@
 #include "py/obj.h"
 #include "py/runtime.h"
 
-#include "shared-bindings/microcontroller/Pin.h"
 #include "shared-bindings/audiomixer/Mixer.h"
 
 //| """Support for audio mixing"""
-//|
 
 STATIC const mp_rom_map_elem_t audiomixer_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_audiomixer) },
@@ -47,4 +45,4 @@ const mp_obj_module_t audiomixer_module = {
     .globals = (mp_obj_dict_t *)&audiomixer_module_globals,
 };
 
-MP_REGISTER_MODULE(MP_QSTR_audiomixer, audiomixer_module, CIRCUITPY_AUDIOMIXER);
+MP_REGISTER_MODULE(MP_QSTR_audiomixer, audiomixer_module);

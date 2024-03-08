@@ -34,16 +34,20 @@
 #include "py/runtime.h"
 #include "periph.h"
 
-#include "fsl_lpi2c.h"
-#include "fsl_gpio.h"
+#include "sdk/drivers/lpi2c/fsl_lpi2c.h"
+#include "sdk/drivers/igpio/fsl_gpio.h"
 
+#if IMXRT11XX
+#define I2C_CLOCK_FREQ (24000000)
+#else
 #define I2C_CLOCK_FREQ (CLOCK_GetFreq(kCLOCK_Usb1PllClk) / 8 / (1 + CLOCK_GetDiv(kCLOCK_Lpi2cDiv)))
+#endif
+
 #define IOMUXC_SW_MUX_CTL_PAD_MUX_MODE_ALT5 5U
 
 // arrays use 0 based numbering: I2C1 is stored at index 0
-#define MAX_I2C 4
-STATIC bool reserved_i2c[MAX_I2C];
-STATIC bool never_reset_i2c[MAX_I2C];
+STATIC bool reserved_i2c[MP_ARRAY_SIZE(mcu_i2c_banks)];
+STATIC bool never_reset_i2c[MP_ARRAY_SIZE(mcu_i2c_banks)];
 
 void i2c_reset(void) {
     for (uint i = 0; i < MP_ARRAY_SIZE(mcu_i2c_banks); i++) {
@@ -63,24 +67,28 @@ static void config_periph_pin(const mcu_periph_obj_t *periph) {
 
     IOMUXC_SetPinConfig(0, 0, 0, 0,
         periph->pin->cfg_reg,
-        IOMUXC_SW_PAD_CTL_PAD_HYS(0)
-        | IOMUXC_SW_PAD_CTL_PAD_PUS(3)
-        | IOMUXC_SW_PAD_CTL_PAD_PUE(0)
+        IOMUXC_SW_PAD_CTL_PAD_PUS(3)
+        #if IMXRT10XX
+        | IOMUXC_SW_PAD_CTL_PAD_HYS(0)
         | IOMUXC_SW_PAD_CTL_PAD_PKE(1)
-        | IOMUXC_SW_PAD_CTL_PAD_ODE(1)
         | IOMUXC_SW_PAD_CTL_PAD_SPEED(2)
+        #endif
+        | IOMUXC_SW_PAD_CTL_PAD_PUE(0)
+        | IOMUXC_SW_PAD_CTL_PAD_ODE(1)
         | IOMUXC_SW_PAD_CTL_PAD_DSE(4)
         | IOMUXC_SW_PAD_CTL_PAD_SRE(0));
 }
 
 static void i2c_check_pin_config(const mcu_pin_obj_t *pin, uint32_t pull) {
     IOMUXC_SetPinConfig(0, 0, 0, 0, pin->cfg_reg,
-        IOMUXC_SW_PAD_CTL_PAD_HYS(1)
-        | IOMUXC_SW_PAD_CTL_PAD_PUS(0)     // Pulldown
-        | IOMUXC_SW_PAD_CTL_PAD_PUE(pull)     // 0=nopull (keeper), 1=pull
+        IOMUXC_SW_PAD_CTL_PAD_PUS(0)     // Pulldown
+        #if IMXRT10XX
+        | IOMUXC_SW_PAD_CTL_PAD_HYS(1)
         | IOMUXC_SW_PAD_CTL_PAD_PKE(1)
-        | IOMUXC_SW_PAD_CTL_PAD_ODE(0)
         | IOMUXC_SW_PAD_CTL_PAD_SPEED(2)
+        #endif
+        | IOMUXC_SW_PAD_CTL_PAD_PUE(pull)     // 0=nopull (keeper), 1=pull
+        | IOMUXC_SW_PAD_CTL_PAD_ODE(0)
         | IOMUXC_SW_PAD_CTL_PAD_DSE(1)
         | IOMUXC_SW_PAD_CTL_PAD_SRE(0));
 }
@@ -109,7 +117,7 @@ void common_hal_busio_i2c_construct(busio_i2c_obj_t *self,
     if (!GPIO_PinRead(sda->gpio, sda->number) || !GPIO_PinRead(scl->gpio, scl->number)) {
         common_hal_reset_pin(sda);
         common_hal_reset_pin(scl);
-        mp_raise_RuntimeError(translate("No pull up found on SDA or SCL; check your wiring"));
+        mp_raise_RuntimeError(MP_ERROR_TEXT("No pull up found on SDA or SCL; check your wiring"));
     }
     #endif
 
@@ -130,6 +138,10 @@ void common_hal_busio_i2c_construct(busio_i2c_obj_t *self,
                 continue;
             }
 
+            if (reserved_i2c[mcu_i2c_scl_list[j].bank_idx - 1]) {
+                continue;
+            }
+
             self->sda = &mcu_i2c_sda_list[i];
             self->scl = &mcu_i2c_scl_list[j];
 
@@ -138,10 +150,13 @@ void common_hal_busio_i2c_construct(busio_i2c_obj_t *self,
     }
 
     if (self->sda == NULL || self->scl == NULL) {
-        mp_raise_ValueError(translate("Invalid pins"));
+        raise_ValueError_invalid_pins();
     } else {
         self->i2c = mcu_i2c_banks[self->sda->bank_idx - 1];
     }
+
+
+    reserved_i2c[self->sda->bank_idx - 1] = true;
 
     config_periph_pin(self->sda);
     config_periph_pin(self->scl);
@@ -210,7 +225,7 @@ void common_hal_busio_i2c_unlock(busio_i2c_obj_t *self) {
     self->has_lock = false;
 }
 
-uint8_t common_hal_busio_i2c_write(busio_i2c_obj_t *self, uint16_t addr,
+STATIC uint8_t _common_hal_busio_i2c_write(busio_i2c_obj_t *self, uint16_t addr,
     const uint8_t *data, size_t len, bool transmit_stop_bit) {
 
     lpi2c_master_transfer_t xfer = { 0 };
@@ -225,6 +240,11 @@ uint8_t common_hal_busio_i2c_write(busio_i2c_obj_t *self, uint16_t addr,
     }
 
     return MP_EIO;
+}
+
+uint8_t common_hal_busio_i2c_write(busio_i2c_obj_t *self, uint16_t addr,
+    const uint8_t *data, size_t len) {
+    return _common_hal_busio_i2c_write(self, addr, data, len, true);
 }
 
 uint8_t common_hal_busio_i2c_read(busio_i2c_obj_t *self, uint16_t addr,
@@ -242,4 +262,14 @@ uint8_t common_hal_busio_i2c_read(busio_i2c_obj_t *self, uint16_t addr,
     }
 
     return MP_EIO;
+}
+
+uint8_t common_hal_busio_i2c_write_read(busio_i2c_obj_t *self, uint16_t addr,
+    uint8_t *out_data, size_t out_len, uint8_t *in_data, size_t in_len) {
+    uint8_t result = _common_hal_busio_i2c_write(self, addr, out_data, out_len, false);
+    if (result != 0) {
+        return result;
+    }
+
+    return common_hal_busio_i2c_read(self, addr, in_data, in_len);
 }

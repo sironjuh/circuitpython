@@ -28,11 +28,10 @@
 #include "py/mperrno.h"
 #include "py/runtime.h"
 
-#include "components/driver/include/driver/i2c.h"
+#include "components/driver/i2c/include/driver/i2c.h"
 
 #include "shared-bindings/microcontroller/__init__.h"
 #include "shared-bindings/microcontroller/Pin.h"
-#include "supervisor/shared/translate.h"
 
 void common_hal_busio_i2c_construct(busio_i2c_obj_t *self,
     const mcu_pin_obj_t *scl, const mcu_pin_obj_t *sda, uint32_t frequency, uint32_t timeout) {
@@ -42,7 +41,7 @@ void common_hal_busio_i2c_construct(busio_i2c_obj_t *self,
     //
     // 46 is also input-only so it'll never work.
     if (scl->number == 45 || scl->number == 46 || sda->number == 45 || sda->number == 46) {
-        mp_raise_ValueError(translate("Invalid pins"));
+        raise_ValueError_invalid_pins();
     }
 
     #if CIRCUITPY_REQUIRE_I2C_PULLUPS
@@ -50,6 +49,8 @@ void common_hal_busio_i2c_construct(busio_i2c_obj_t *self,
     gpio_set_direction(sda->number, GPIO_MODE_DEF_INPUT);
     gpio_set_direction(scl->number, GPIO_MODE_DEF_INPUT);
 
+    gpio_pullup_dis(sda->number);
+    gpio_pullup_dis(scl->number);
     gpio_pulldown_en(sda->number);
     gpio_pulldown_en(scl->number);
 
@@ -69,20 +70,21 @@ void common_hal_busio_i2c_construct(busio_i2c_obj_t *self,
     if (gpio_get_level(sda->number) == 0 || gpio_get_level(scl->number) == 0) {
         reset_pin_number(sda->number);
         reset_pin_number(scl->number);
-        mp_raise_RuntimeError(translate("No pull up found on SDA or SCL; check your wiring"));
+        mp_raise_RuntimeError(MP_ERROR_TEXT("No pull up found on SDA or SCL; check your wiring"));
     }
     #endif
 
     self->xSemaphore = xSemaphoreCreateMutex();
     if (self->xSemaphore == NULL) {
-        mp_raise_RuntimeError(translate("Unable to create lock"));
+        mp_raise_RuntimeError(MP_ERROR_TEXT("Unable to create lock"));
     }
     self->sda_pin = sda;
     self->scl_pin = scl;
     self->i2c_num = peripherals_i2c_get_free_num();
+    self->has_lock = 0;
 
     if (self->i2c_num == I2C_NUM_MAX) {
-        mp_raise_ValueError(translate("All I2C peripherals are in use"));
+        mp_raise_ValueError(MP_ERROR_TEXT("All I2C peripherals are in use"));
     }
 
     // Delete any previous driver.
@@ -111,7 +113,7 @@ void common_hal_busio_i2c_construct(busio_i2c_obj_t *self,
         if (err == ESP_FAIL) {
             mp_raise_OSError(MP_EIO);
         } else {
-            mp_raise_ValueError(translate("Invalid argument"));
+            mp_raise_RuntimeError(MP_ERROR_TEXT("init I2C"));
         }
     }
 
@@ -136,13 +138,19 @@ void common_hal_busio_i2c_deinit(busio_i2c_obj_t *self) {
     self->scl_pin = NULL;
 }
 
-bool common_hal_busio_i2c_probe(busio_i2c_obj_t *self, uint8_t addr) {
+static esp_err_t i2c_zero_length_write(busio_i2c_obj_t *self, uint8_t addr, TickType_t timeout) {
+    // i2c_master_write_to_device() won't do zero-length writes, so we do it by hand.
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     i2c_master_start(cmd);
     i2c_master_write_byte(cmd, addr << 1, true);
     i2c_master_stop(cmd);
-    esp_err_t result = i2c_master_cmd_begin(self->i2c_num, cmd, 10);
+    esp_err_t result = i2c_master_cmd_begin(self->i2c_num, cmd, timeout);
     i2c_cmd_link_delete(cmd);
+    return result;
+}
+
+bool common_hal_busio_i2c_probe(busio_i2c_obj_t *self, uint8_t addr) {
+    esp_err_t result = i2c_zero_length_write(self, addr, 1);
     return result == ESP_OK;
 }
 
@@ -163,45 +171,36 @@ void common_hal_busio_i2c_unlock(busio_i2c_obj_t *self) {
     self->has_lock = false;
 }
 
-uint8_t common_hal_busio_i2c_write(busio_i2c_obj_t *self, uint16_t addr,
-    const uint8_t *data, size_t len, bool transmit_stop_bit) {
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, addr << 1, true);
-    i2c_master_write(cmd, (uint8_t *)data, len, true);
-    if (transmit_stop_bit) {
-        i2c_master_stop(cmd);
+static uint8_t convert_esp_err(esp_err_t result) {
+    switch (result) {
+        case ESP_OK:
+            return 0;
+        case ESP_FAIL:
+            return MP_ENODEV;
+        case ESP_ERR_TIMEOUT:
+            return MP_ETIMEDOUT;
+        default:
+            return MP_EIO;
     }
-    esp_err_t result = i2c_master_cmd_begin(self->i2c_num, cmd, 100 /* wait in ticks */);
-    i2c_cmd_link_delete(cmd);
-
-    if (result == ESP_OK) {
-        return 0;
-    } else if (result == ESP_FAIL) {
-        return MP_ENODEV;
-    }
-    return MP_EIO;
 }
 
-uint8_t common_hal_busio_i2c_read(busio_i2c_obj_t *self, uint16_t addr,
-    uint8_t *data, size_t len) {
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, addr << 1 | 1, true); // | 1 to indicate read
-    if (len > 1) {
-        i2c_master_read(cmd, data, len - 1, 0);
-    }
-    i2c_master_read_byte(cmd, data + len - 1, 1);
-    i2c_master_stop(cmd);
-    esp_err_t result = i2c_master_cmd_begin(self->i2c_num, cmd, 100 /* wait in ticks */);
-    i2c_cmd_link_delete(cmd);
+uint8_t common_hal_busio_i2c_write(busio_i2c_obj_t *self, uint16_t addr, const uint8_t *data, size_t len) {
+    return convert_esp_err(len == 0
+        ? i2c_zero_length_write(self, addr, 100)
+        : i2c_master_write_to_device(self->i2c_num, (uint8_t)addr, data, len, 100 /* wait in ticks */)
+        );
+}
 
-    if (result == ESP_OK) {
-        return 0;
-    } else if (result == ESP_FAIL) {
-        return MP_ENODEV;
-    }
-    return MP_EIO;
+uint8_t common_hal_busio_i2c_read(busio_i2c_obj_t *self, uint16_t addr, uint8_t *data, size_t len) {
+    return convert_esp_err(
+        i2c_master_read_from_device(self->i2c_num, (uint8_t)addr, data, len, 100 /* wait in ticks */));
+}
+
+uint8_t common_hal_busio_i2c_write_read(busio_i2c_obj_t *self, uint16_t addr,
+    uint8_t *out_data, size_t out_len, uint8_t *in_data, size_t in_len) {
+    return convert_esp_err(
+        i2c_master_write_read_device(self->i2c_num, (uint8_t)addr,
+            out_data, out_len, in_data, in_len, 100 /* wait in ticks */));
 }
 
 void common_hal_busio_i2c_never_reset(busio_i2c_obj_t *self) {

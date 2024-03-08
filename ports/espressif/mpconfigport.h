@@ -28,17 +28,29 @@
 #ifndef MICROPY_INCLUDED_ESPRESSIF_MPCONFIGPORT_H
 #define MICROPY_INCLUDED_ESPRESSIF_MPCONFIGPORT_H
 
+// Enable for debugging.
+// #define CIRCUITPY_VERBOSE_BLE               (1)
+
 #define MICROPY_NLR_THUMB                   (0)
 
 #define MICROPY_USE_INTERNAL_PRINTF         (0)
 #define MICROPY_PY_SYS_PLATFORM             "Espressif"
 
+#define CIRCUITPY_DIGITALIO_HAVE_INPUT_ONLY (1)
+
 #include "py/circuitpy_mpconfig.h"
 
-#define MICROPY_PORT_ROOT_POINTERS \
-    CIRCUITPY_COMMON_ROOT_POINTERS
 #define MICROPY_NLR_SETJMP                  (1)
 #define CIRCUITPY_DEFAULT_STACK_SIZE        0x6000
+
+// Nearly all boards have this because it is used to enter the ROM bootloader.
+#ifndef CIRCUITPY_BOOT_BUTTON
+  #if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32H2)
+    #define CIRCUITPY_BOOT_BUTTON (&pin_GPIO9)
+  #elif !defined(CONFIG_IDF_TARGET_ESP32)
+    #define CIRCUITPY_BOOT_BUTTON (&pin_GPIO0)
+  #endif
+#endif
 
 #define CIRCUITPY_INTERNAL_NVM_START_ADDR (0x9000)
 
@@ -61,4 +73,5 @@
 #ifndef CIRCUITPY_I2C_ALLOW_INTERNAL_PULL_UP
 #define CIRCUITPY_I2C_ALLOW_INTERNAL_PULL_UP (0)
 #endif
+
 #endif  // MICROPY_INCLUDED_ESPRESSIF_MPCONFIGPORT_H

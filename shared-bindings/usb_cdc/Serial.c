@@ -29,11 +29,10 @@
 #include "shared-bindings/usb_cdc/Serial.h"
 #include "shared-bindings/util.h"
 
-#include "py/ioctl.h"
+#include "py/stream.h"
 #include "py/objproperty.h"
 #include "py/runtime.h"
 #include "py/stream.h"
-#include "supervisor/shared/translate.h"
 
 //| class Serial:
 //|     """Receives cdc commands over USB"""
@@ -54,11 +53,12 @@
 //|         ...
 //|
 //|     def readinto(self, buf: WriteableBuffer) -> int:
-//|         """Read bytes into the ``buf``.  If ``nbytes`` is specified then read at most
-//|         that many bytes, subject to `timeout`.  Otherwise, read at most ``len(buf)`` bytes.
+//|         """Read bytes into the ``buf``. Read at most ``len(buf)`` bytes. If `timeout`
+//|         is > 0 or ``None``, keep waiting until the timeout expires or ``len(buf)``
+//|         bytes are available.
 //|
 //|         :return: number of bytes read and stored into ``buf``
-//|         :rtype: bytes"""
+//|         :rtype: int"""
 //|         ...
 //|
 //|     def readline(self, size: int = -1) -> Optional[bytes]:
@@ -94,7 +94,6 @@
 //|     def flush(self) -> None:
 //|         """Force out any unwritten bytes, waiting until they are written."""
 //|         ...
-//|
 
 // These three methods are used by the shared stream methods.
 STATIC mp_uint_t usb_cdc_serial_read_stream(mp_obj_t self_in, void *buf_in, mp_uint_t size, int *errcode) {
@@ -120,14 +119,14 @@ STATIC mp_uint_t usb_cdc_serial_ioctl_stream(mp_obj_t self_in, mp_uint_t request
     usb_cdc_serial_obj_t *self = MP_OBJ_TO_PTR(self_in);
     mp_uint_t ret = 0;
     switch (request) {
-        case MP_IOCTL_POLL: {
+        case MP_STREAM_POLL: {
             mp_uint_t flags = arg;
             ret = 0;
-            if ((flags & MP_IOCTL_POLL_RD) && common_hal_usb_cdc_serial_get_in_waiting(self) > 0) {
-                ret |= MP_IOCTL_POLL_RD;
+            if ((flags & MP_STREAM_POLL_RD) && common_hal_usb_cdc_serial_get_in_waiting(self) > 0) {
+                ret |= MP_STREAM_POLL_RD;
             }
-            if ((flags & MP_IOCTL_POLL_WR) && common_hal_usb_cdc_serial_get_out_waiting(self) == 0) {
-                ret |= MP_IOCTL_POLL_WR;
+            if ((flags & MP_STREAM_POLL_WR) && common_hal_usb_cdc_serial_get_out_waiting(self) == 0) {
+                ret |= MP_STREAM_POLL_WR;
             }
             break;
         }
@@ -150,56 +149,40 @@ STATIC mp_uint_t usb_cdc_serial_ioctl_stream(mp_obj_t self_in, mp_uint_t request
 //|       Most terminal programs and ``pyserial`` assert DTR when opening a serial connection.
 //|       However, the C# ``SerialPort`` API does not. You must set ``SerialPort.DtrEnable``.
 //|     """
-//|
 STATIC mp_obj_t usb_cdc_serial_get_connected(mp_obj_t self_in) {
     usb_cdc_serial_obj_t *self = MP_OBJ_TO_PTR(self_in);
     return mp_obj_new_bool(common_hal_usb_cdc_serial_get_connected(self));
 }
 MP_DEFINE_CONST_FUN_OBJ_1(usb_cdc_serial_get_connected_obj, usb_cdc_serial_get_connected);
 
-const mp_obj_property_t usb_cdc_serial_connected_obj = {
-    .base.type = &mp_type_property,
-    .proxy = {(mp_obj_t)&usb_cdc_serial_get_connected_obj,
-              MP_ROM_NONE,
-              MP_ROM_NONE},
-};
+MP_PROPERTY_GETTER(usb_cdc_serial_connected_obj,
+    (mp_obj_t)&usb_cdc_serial_get_connected_obj);
 
 //|     in_waiting: int
 //|     """Returns the number of bytes waiting to be read on the USB serial input. (read-only)"""
-//|
 STATIC mp_obj_t usb_cdc_serial_get_in_waiting(mp_obj_t self_in) {
     usb_cdc_serial_obj_t *self = MP_OBJ_TO_PTR(self_in);
     return mp_obj_new_int(common_hal_usb_cdc_serial_get_in_waiting(self));
 }
 MP_DEFINE_CONST_FUN_OBJ_1(usb_cdc_serial_get_in_waiting_obj, usb_cdc_serial_get_in_waiting);
 
-const mp_obj_property_t usb_cdc_serial_in_waiting_obj = {
-    .base.type = &mp_type_property,
-    .proxy = {(mp_obj_t)&usb_cdc_serial_get_in_waiting_obj,
-              MP_ROM_NONE,
-              MP_ROM_NONE},
-};
+MP_PROPERTY_GETTER(usb_cdc_serial_in_waiting_obj,
+    (mp_obj_t)&usb_cdc_serial_get_in_waiting_obj);
 
 //|     out_waiting: int
 //|     """Returns the number of bytes waiting to be written on the USB serial output. (read-only)"""
-//|
 STATIC mp_obj_t usb_cdc_serial_get_out_waiting(mp_obj_t self_in) {
     usb_cdc_serial_obj_t *self = MP_OBJ_TO_PTR(self_in);
     return mp_obj_new_int(common_hal_usb_cdc_serial_get_out_waiting(self));
 }
 MP_DEFINE_CONST_FUN_OBJ_1(usb_cdc_serial_get_out_waiting_obj, usb_cdc_serial_get_out_waiting);
 
-const mp_obj_property_t usb_cdc_serial_out_waiting_obj = {
-    .base.type = &mp_type_property,
-    .proxy = {(mp_obj_t)&usb_cdc_serial_get_out_waiting_obj,
-              MP_ROM_NONE,
-              MP_ROM_NONE},
-};
+MP_PROPERTY_GETTER(usb_cdc_serial_out_waiting_obj,
+    (mp_obj_t)&usb_cdc_serial_get_out_waiting_obj);
 
 //|     def reset_input_buffer(self) -> None:
 //|         """Clears any unread bytes."""
 //|         ...
-//|
 STATIC mp_obj_t usb_cdc_serial_reset_input_buffer(mp_obj_t self_in) {
     usb_cdc_serial_obj_t *self = MP_OBJ_TO_PTR(self_in);
     common_hal_usb_cdc_serial_reset_input_buffer(self);
@@ -210,7 +193,6 @@ MP_DEFINE_CONST_FUN_OBJ_1(usb_cdc_serial_reset_input_buffer_obj, usb_cdc_serial_
 //|     def reset_output_buffer(self) -> None:
 //|         """Clears any unwritten bytes."""
 //|         ...
-//|
 STATIC mp_obj_t usb_cdc_serial_reset_output_buffer(mp_obj_t self_in) {
     usb_cdc_serial_obj_t *self = MP_OBJ_TO_PTR(self_in);
     common_hal_usb_cdc_serial_reset_output_buffer(self);
@@ -221,7 +203,6 @@ MP_DEFINE_CONST_FUN_OBJ_1(usb_cdc_serial_reset_output_buffer_obj, usb_cdc_serial
 //|     timeout: Optional[float]
 //|     """The initial value of `timeout` is ``None``. If ``None``, wait indefinitely to satisfy
 //|     the conditions of a read operation. If 0, do not wait. If > 0, wait only ``timeout`` seconds."""
-//|
 STATIC mp_obj_t usb_cdc_serial_get_timeout(mp_obj_t self_in) {
     usb_cdc_serial_obj_t *self = MP_OBJ_TO_PTR(self_in);
     mp_float_t timeout = common_hal_usb_cdc_serial_get_timeout(self);
@@ -237,12 +218,9 @@ STATIC mp_obj_t usb_cdc_serial_set_timeout(mp_obj_t self_in, mp_obj_t timeout_in
 }
 MP_DEFINE_CONST_FUN_OBJ_2(usb_cdc_serial_set_timeout_obj, usb_cdc_serial_set_timeout);
 
-const mp_obj_property_t usb_cdc_serial_timeout_obj = {
-    .base.type = &mp_type_property,
-    .proxy = {(mp_obj_t)&usb_cdc_serial_get_timeout_obj,
-              (mp_obj_t)&usb_cdc_serial_set_timeout_obj,
-              MP_ROM_NONE},
-};
+MP_PROPERTY_GETSET(usb_cdc_serial_timeout_obj,
+    (mp_obj_t)&usb_cdc_serial_get_timeout_obj,
+    (mp_obj_t)&usb_cdc_serial_set_timeout_obj);
 
 //|     write_timeout: Optional[float]
 //|     """The initial value of `write_timeout` is ``None``. If ``None``, wait indefinitely to finish
@@ -264,12 +242,9 @@ STATIC mp_obj_t usb_cdc_serial_set_write_timeout(mp_obj_t self_in, mp_obj_t writ
 }
 MP_DEFINE_CONST_FUN_OBJ_2(usb_cdc_serial_set_write_timeout_obj, usb_cdc_serial_set_write_timeout);
 
-const mp_obj_property_t usb_cdc_serial_write_timeout_obj = {
-    .base.type = &mp_type_property,
-    .proxy = {(mp_obj_t)&usb_cdc_serial_get_write_timeout_obj,
-              (mp_obj_t)&usb_cdc_serial_set_write_timeout_obj,
-              MP_ROM_NONE},
-};
+MP_PROPERTY_GETSET(usb_cdc_serial_write_timeout_obj,
+    (mp_obj_t)&usb_cdc_serial_get_write_timeout_obj,
+    (mp_obj_t)&usb_cdc_serial_set_write_timeout_obj);
 
 
 STATIC const mp_rom_map_elem_t usb_cdc_serial_locals_dict_table[] = {
@@ -298,7 +273,6 @@ STATIC const mp_rom_map_elem_t usb_cdc_serial_locals_dict_table[] = {
 STATIC MP_DEFINE_CONST_DICT(usb_cdc_serial_locals_dict, usb_cdc_serial_locals_dict_table);
 
 STATIC const mp_stream_p_t usb_cdc_serial_stream_p = {
-    MP_PROTO_IMPLEMENT(MP_QSTR_protocol_stream)
     .read = usb_cdc_serial_read_stream,
     .write = usb_cdc_serial_write_stream,
     .ioctl = usb_cdc_serial_ioctl_stream,
@@ -308,14 +282,11 @@ STATIC const mp_stream_p_t usb_cdc_serial_stream_p = {
     .pyserial_dont_return_none_compatibility = true,
 };
 
-const mp_obj_type_t usb_cdc_serial_type = {
-    { &mp_type_type },
-    .flags = MP_TYPE_FLAG_EXTENDED,
-    .name = MP_QSTR_Serial,
-    .locals_dict = (mp_obj_dict_t *)&usb_cdc_serial_locals_dict,
-    MP_TYPE_EXTENDED_FIELDS(
-        .getiter = mp_identity_getiter,
-        .iternext = mp_stream_unbuffered_iter,
-        .protocol = &usb_cdc_serial_stream_p,
-        ),
-};
+MP_DEFINE_CONST_OBJ_TYPE(
+    usb_cdc_serial_type,
+    MP_QSTR_Serial,
+    MP_TYPE_FLAG_ITER_IS_ITERNEXT | MP_TYPE_FLAG_HAS_SPECIAL_ACCESSORS,
+    locals_dict, &usb_cdc_serial_locals_dict,
+    iter, mp_stream_unbuffered_iter,
+    protocol, &usb_cdc_serial_stream_p
+    );

@@ -33,7 +33,6 @@
 //| """Support for camera input
 //|
 //| The `camera` module contains classes to control the camera and take pictures."""
-//|
 STATIC const mp_rom_map_elem_t camera_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_camera) },
     { MP_ROM_QSTR(MP_QSTR_Camera), MP_ROM_PTR(&camera_type) },
@@ -49,4 +48,4 @@ const mp_obj_module_t camera_module = {
     .globals = (mp_obj_dict_t *)&camera_module_globals,
 };
 
-MP_REGISTER_MODULE(MP_QSTR_camera, camera_module, CIRCUITPY_CAMERA);
+MP_REGISTER_MODULE(MP_QSTR_camera, camera_module);

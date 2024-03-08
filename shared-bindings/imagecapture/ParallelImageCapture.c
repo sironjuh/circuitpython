@@ -25,7 +25,6 @@
  */
 
 #include "py/obj.h"
-#include "py/objproperty.h"
 #include "py/runtime.h"
 
 #include "shared/runtime/context_manager_helpers.h"
@@ -47,13 +46,14 @@
 //|     ) -> None:
 //|         """Create a parallel image capture object
 //|
+//|         This object is usually used with a camera-specific wrapper library such as `adafruit_ov5640 <https://circuitpython.readthedocs.io/projects/ov5640/en/latest/>`_.
+//|
 //|         :param List[microcontroller.Pin] data_pins: The data pins.
 //|         :param microcontroller.Pin clock: The pixel clock input.
 //|         :param microcontroller.Pin vsync: The vertical sync input, which has a negative-going pulse at the beginning of each frame.
 //|         :param microcontroller.Pin href: The horizontal reference input, which is high whenever the camera is transmitting valid pixel information.
 //|         """
 //|         ...
-//|
 STATIC mp_obj_t imagecapture_parallelimagecapture_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *all_args) {
     enum { ARG_data_pins, ARG_clock, ARG_vsync, ARG_href,
            NUM_ARGS };
@@ -71,12 +71,12 @@ STATIC mp_obj_t imagecapture_parallelimagecapture_make_new(const mp_obj_type_t *
     uint8_t pin_count;
     validate_pins(MP_QSTR_data, pins, MP_ARRAY_SIZE(pins), args[ARG_data_pins].u_obj, &pin_count);
 
-    const mcu_pin_obj_t *clock = validate_obj_is_free_pin(args[ARG_clock].u_obj);
-    const mcu_pin_obj_t *vsync = validate_obj_is_free_pin_or_none(args[ARG_vsync].u_obj);
-    const mcu_pin_obj_t *href = validate_obj_is_free_pin_or_none(args[ARG_href].u_obj);
+    const mcu_pin_obj_t *clock = validate_obj_is_free_pin(args[ARG_clock].u_obj, MP_QSTR_clock);
+    const mcu_pin_obj_t *vsync = validate_obj_is_free_pin_or_none(args[ARG_vsync].u_obj, MP_QSTR_vsync);
+    const mcu_pin_obj_t *href = validate_obj_is_free_pin_or_none(args[ARG_href].u_obj, MP_QSTR_href);
 
-    imagecapture_parallelimagecapture_obj_t *self = m_new_obj(imagecapture_parallelimagecapture_obj_t);
-    self->base.type = &imagecapture_parallelimagecapture_type;
+    imagecapture_parallelimagecapture_obj_t *self =
+        mp_obj_malloc(imagecapture_parallelimagecapture_obj_t, &imagecapture_parallelimagecapture_type);
 
     common_hal_imagecapture_parallelimagecapture_construct(self, pins, pin_count, clock, vsync, href);
 
@@ -88,7 +88,6 @@ STATIC mp_obj_t imagecapture_parallelimagecapture_make_new(const mp_obj_type_t *
 //|
 //|         This will stop a continuous-mode capture, if one is in progress."""
 //|         ...
-//|
 STATIC mp_obj_t imagecapture_parallelimagecapture_capture(mp_obj_t self_in, mp_obj_t buffer) {
     imagecapture_parallelimagecapture_obj_t *self = (imagecapture_parallelimagecapture_obj_t *)self_in;
     common_hal_imagecapture_parallelimagecapture_singleshot_capture(self, buffer);
@@ -97,7 +96,9 @@ STATIC mp_obj_t imagecapture_parallelimagecapture_capture(mp_obj_t self_in, mp_o
 }
 STATIC MP_DEFINE_CONST_FUN_OBJ_2(imagecapture_parallelimagecapture_capture_obj, imagecapture_parallelimagecapture_capture);
 
-//|     def continuous_capture_start(self, buffer1: WriteableBuffer, buffer2: WriteableBuffer, /) -> None:
+//|     def continuous_capture_start(
+//|         self, buffer1: WriteableBuffer, buffer2: WriteableBuffer, /
+//|     ) -> None:
 //|         """Begin capturing into the given buffers in the background.
 //|
 //|         Call `continuous_capture_get_frame` to get the next available
@@ -107,7 +108,6 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_2(imagecapture_parallelimagecapture_capture_obj, 
 //|         `ParallelImageCapture` object keeps references to ``buffer1`` and
 //|         ``buffer2``, so the objects will not be garbage collected."""
 //|         ...
-//|
 STATIC mp_obj_t imagecapture_parallelimagecapture_continuous_capture_start(mp_obj_t self_in, mp_obj_t buffer1, mp_obj_t buffer2) {
     imagecapture_parallelimagecapture_obj_t *self = (imagecapture_parallelimagecapture_obj_t *)self_in;
     common_hal_imagecapture_parallelimagecapture_continuous_capture_start(self, buffer1, buffer2);
@@ -119,7 +119,6 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_3(imagecapture_parallelimagecapture_continuous_ca
 //|     def continuous_capture_get_frame(self) -> WriteableBuffer:
 //|         """Return the next available frame, one of the two buffers passed to `continuous_capture_start`"""
 //|         ...
-//|
 STATIC mp_obj_t imagecapture_parallelimagecapture_continuous_capture_get_frame(mp_obj_t self_in) {
     imagecapture_parallelimagecapture_obj_t *self = (imagecapture_parallelimagecapture_obj_t *)self_in;
     return common_hal_imagecapture_parallelimagecapture_continuous_capture_get_frame(self);
@@ -135,7 +134,6 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_1(imagecapture_parallelimagecapture_continuous_ca
 //|         references to the buffers passed to `continuous_capture_start`,
 //|         potentially allowing the objects to be garbage collected."""
 //|         ...
-//|
 STATIC mp_obj_t imagecapture_parallelimagecapture_continuous_capture_stop(mp_obj_t self_in) {
     imagecapture_parallelimagecapture_obj_t *self = (imagecapture_parallelimagecapture_obj_t *)self_in;
     common_hal_imagecapture_parallelimagecapture_continuous_capture_stop(self);
@@ -150,7 +148,6 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_1(imagecapture_parallelimagecapture_continuous_ca
 //|     def deinit(self) -> None:
 //|         """Deinitialize this instance"""
 //|         ...
-//|
 STATIC mp_obj_t imagecapture_parallelimagecapture_deinit(mp_obj_t self_in) {
     imagecapture_parallelimagecapture_obj_t *self = (imagecapture_parallelimagecapture_obj_t *)self_in;
     common_hal_imagecapture_parallelimagecapture_deinit(self);
@@ -162,7 +159,6 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_1(imagecapture_parallelimagecapture_deinit_obj, i
 //|     def __enter__(self) -> ParallelImageCapture:
 //|         """No-op used in Context Managers."""
 //|         ...
-//|
 //  Provided by context manager helper.
 
 //|     def __exit__(self) -> None:
@@ -192,9 +188,10 @@ STATIC const mp_rom_map_elem_t imagecapture_parallelimagecapture_locals_dict_tab
 
 STATIC MP_DEFINE_CONST_DICT(imagecapture_parallelimagecapture_locals_dict, imagecapture_parallelimagecapture_locals_dict_table);
 
-const mp_obj_type_t imagecapture_parallelimagecapture_type = {
-    { &mp_type_type },
-    .name = MP_QSTR_ParallelImageCapture,
-    .make_new = imagecapture_parallelimagecapture_make_new,
-    .locals_dict = (mp_obj_dict_t *)&imagecapture_parallelimagecapture_locals_dict,
-};
+MP_DEFINE_CONST_OBJ_TYPE(
+    imagecapture_parallelimagecapture_type,
+    MP_QSTR_ParallelImageCapture,
+    MP_TYPE_FLAG_NONE,
+    make_new, imagecapture_parallelimagecapture_make_new,
+    locals_dict, &imagecapture_parallelimagecapture_locals_dict
+    );

@@ -1,10 +1,10 @@
 :mod:`re` -- simple regular expressions
-========================================
+=======================================
 
 .. module:: re
    :synopsis: regular expressions
 
-|see_cpython_module| :mod:`cpython:re`.
+|see_cpython_module| :mod:`python:re`.
 
 This module implements regular expression operations. Regular expression
 syntax supported is a subset of CPython ``re`` module (and actually is
@@ -95,11 +95,11 @@ Supported operators and special sequences are:
 
 Example::
 
-    import ure
+    import re
 
-    # As ure doesn't support escapes itself, use of r"" strings is not
+    # As re doesn't support escapes itself, use of r"" strings is not
     # recommended.
-    regex = ure.compile("[\r\n]")
+    regex = re.compile("[\r\n]")
 
     regex.split("line1\rline2\nline3\r\n")
 

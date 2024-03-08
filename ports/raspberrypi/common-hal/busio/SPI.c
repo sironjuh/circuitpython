@@ -54,8 +54,13 @@ void reset_spi(void) {
 
 void common_hal_busio_spi_construct(busio_spi_obj_t *self,
     const mcu_pin_obj_t *clock, const mcu_pin_obj_t *mosi,
-    const mcu_pin_obj_t *miso) {
+    const mcu_pin_obj_t *miso, bool half_duplex) {
     size_t instance_index = NO_INSTANCE;
+
+    if (half_duplex) {
+        mp_raise_NotImplementedError_varg(MP_ERROR_TEXT("%q"), MP_QSTR_half_duplex);
+    }
+
     if (clock->number % 4 == 2) {
         instance_index = (clock->number / 8) % 2;
     }
@@ -77,7 +82,7 @@ void common_hal_busio_spi_construct(busio_spi_obj_t *self,
     // TODO: Check to see if we're sharing the SPI with a native APA102.
 
     if (instance_index > 1) {
-        mp_raise_ValueError(translate("Invalid pins"));
+        raise_ValueError_invalid_pins();
     }
 
     if (instance_index == 0) {
@@ -87,10 +92,11 @@ void common_hal_busio_spi_construct(busio_spi_obj_t *self,
     }
 
     if ((spi_get_hw(self->peripheral)->cr1 & SPI_SSPCR1_SSE_BITS) != 0) {
-        mp_raise_ValueError(translate("SPI peripheral in use"));
+        mp_raise_ValueError(MP_ERROR_TEXT("SPI peripheral in use"));
     }
 
-    spi_init(self->peripheral, 250000);
+    self->target_frequency = 250000;
+    self->real_frequency = spi_init(self->peripheral, self->target_frequency);
 
     gpio_set_function(clock->number, GPIO_FUNC_SPI);
     claim_pin(clock);
@@ -144,6 +150,15 @@ bool common_hal_busio_spi_configure(busio_spi_obj_t *self,
     }
 
     spi_set_format(self->peripheral, bits, polarity, phase, SPI_MSB_FIRST);
+
+    // Workaround to start with clock line high if polarity=1. The hw SPI peripheral does not do this
+    // automatically. See https://github.com/raspberrypi/pico-sdk/issues/868 and
+    // https://forums.raspberrypi.com/viewtopic.php?t=336142
+    // TODO: scheduled to be be fixed in pico-sdk 1.5.0.
+    if (polarity) {
+        hw_clear_bits(&spi_get_hw(self->peripheral)->cr1, SPI_SSPCR1_SSE_BITS); // disable the SPI
+        hw_set_bits(&spi_get_hw(self->peripheral)->cr1, SPI_SSPCR1_SSE_BITS); // re-enable the SPI
+    }
 
     self->polarity = polarity;
     self->phase = phase;

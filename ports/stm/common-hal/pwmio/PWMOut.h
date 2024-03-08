@@ -24,8 +24,7 @@
  * THE SOFTWARE.
  */
 
-#ifndef MICROPY_INCLUDED_STM32F4_COMMON_HAL_PWMIO_PWMOUT_H
-#define MICROPY_INCLUDED_STM32F4_COMMON_HAL_PWMIO_PWMOUT_H
+#pragma once
 
 #include "common-hal/microcontroller/Pin.h"
 
@@ -39,14 +38,10 @@ typedef struct {
     TIM_HandleTypeDef handle;
     TIM_OC_InitTypeDef chan_handle;
     const mcu_tim_pin_obj_t *tim;
-    uint8_t channel : 7;
-    bool variable_frequency : 1;
-    uint16_t duty_cycle;
     uint32_t frequency;
     uint32_t period;
     const mcu_pin_obj_t *pin;
+    uint16_t duty_cycle;
+    uint8_t channel;
+    bool variable_frequency;
 } pwmio_pwmout_obj_t;
-
-void pwmout_reset(void);
-
-#endif // MICROPY_INCLUDED_STM32F4_COMMON_HAL_PWMIO_PWMOUT_H

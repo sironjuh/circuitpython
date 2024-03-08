@@ -37,13 +37,13 @@
 #include "supervisor/shared/tick.h"
 
 STATIC void write_to_ringbuf(bleio_packet_buffer_obj_t *self, uint8_t *data, uint16_t len) {
-    if (len + sizeof(uint16_t) > ringbuf_capacity(&self->ringbuf)) {
+    if (len + sizeof(uint16_t) > ringbuf_size(&self->ringbuf)) {
         // This shouldn't happen.
         return;
     }
     // Push all the data onto the ring buffer.
     // Make room for the new value by dropping the oldest packets first.
-    while (ringbuf_capacity(&self->ringbuf) - ringbuf_num_filled(&self->ringbuf) < len + sizeof(uint16_t)) {
+    while (ringbuf_size(&self->ringbuf) - ringbuf_num_filled(&self->ringbuf) < len + sizeof(uint16_t)) {
         uint16_t packet_length;
         ringbuf_get_n(&self->ringbuf, (uint8_t *)&packet_length, sizeof(uint16_t));
         for (uint16_t i = 0; i < packet_length; i++) {
@@ -101,8 +101,8 @@ void common_hal_bleio_packet_buffer_construct(
     }
 
     if (incoming) {
-        if (!ringbuf_alloc(&self->ringbuf, buffer_size * (sizeof(uint16_t) + max_packet_size), false)) {
-            mp_raise_ValueError(translate("Buffer too large and unable to allocate"));
+        if (!ringbuf_alloc(&self->ringbuf, buffer_size * (sizeof(uint16_t) + max_packet_size))) {
+            mp_raise_ValueError(MP_ERROR_TEXT("Buffer too large and unable to allocate"));
         }
     }
 
@@ -110,8 +110,8 @@ void common_hal_bleio_packet_buffer_construct(
         self->packet_queued = false;
         self->pending_index = 0;
         self->pending_size = 0;
-        self->outgoing[0] = m_malloc(max_packet_size, false);
-        self->outgoing[1] = m_malloc(max_packet_size, false);
+        self->outgoing[0] = m_malloc(max_packet_size);
+        self->outgoing[1] = m_malloc(max_packet_size);
     } else {
         self->outgoing[0] = NULL;
         self->outgoing[1] = NULL;
@@ -151,7 +151,7 @@ mp_int_t common_hal_bleio_packet_buffer_readinto(bleio_packet_buffer_obj_t *self
 mp_int_t common_hal_bleio_packet_buffer_write(bleio_packet_buffer_obj_t *self,
     const uint8_t *data, size_t len, uint8_t *header, size_t header_len) {
     if (self->outgoing[0] == NULL) {
-        mp_raise_bleio_BluetoothError(translate("Writes not supported on Characteristic"));
+        mp_raise_bleio_BluetoothError(MP_ERROR_TEXT("Writes not supported on Characteristic"));
     }
     if (self->conn_handle == BLE_CONN_HANDLE_INVALID) {
         return -1;
@@ -160,7 +160,7 @@ mp_int_t common_hal_bleio_packet_buffer_write(bleio_packet_buffer_obj_t *self,
 
     if (len + header_len > outgoing_packet_length) {
         // Supplied data will not fit in a single BLE packet.
-        mp_raise_ValueError(translate("Total data to write is larger than outgoing_packet_length"));
+        mp_raise_ValueError(MP_ERROR_TEXT("Total data to write is larger than outgoing_packet_length"));
     }
 
     if (len + self->pending_size > outgoing_packet_length) {
@@ -264,5 +264,6 @@ bool common_hal_bleio_packet_buffer_deinited(bleio_packet_buffer_obj_t *self) {
 void common_hal_bleio_packet_buffer_deinit(bleio_packet_buffer_obj_t *self) {
     if (!common_hal_bleio_packet_buffer_deinited(self)) {
         bleio_characteristic_clear_observer(self->characteristic);
+        ringbuf_deinit(&self->ringbuf);
     }
 }

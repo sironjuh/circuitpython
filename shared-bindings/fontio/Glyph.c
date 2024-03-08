@@ -31,15 +31,17 @@
 //| class Glyph:
 //|     """Storage of glyph info"""
 //|
-//|     def __init__(self,
-//|                  bitmap: displayio.Bitmap,
-//|                  tile_index: int,
-//|                  width: int,
-//|                  height: int,
-//|                  dx: int,
-//|                  dy: int,
-//|                  shift_x: int,
-//|                  shift_y: int) -> None:
+//|     def __init__(
+//|         self,
+//|         bitmap: displayio.Bitmap,
+//|         tile_index: int,
+//|         width: int,
+//|         height: int,
+//|         dx: int,
+//|         dy: int,
+//|         shift_x: int,
+//|         shift_y: int,
+//|     ) -> None:
 //|         """Named tuple used to capture a single glyph and its attributes.
 //|
 //|         :param bitmap: the bitmap including the glyph
@@ -53,23 +55,7 @@
 //|         ...
 //|
 const mp_obj_namedtuple_type_t fontio_glyph_type = {
-    .base = {
-        .base = {
-            .type = &mp_type_type
-        },
-        .name = MP_QSTR_Glyph,
-        .flags = MP_TYPE_FLAG_EXTENDED,
-        .print = namedtuple_print,
-        .make_new = namedtuple_make_new,
-        .parent = &mp_type_tuple,
-        .attr = namedtuple_attr,
-        MP_TYPE_EXTENDED_FIELDS(
-            .unary_op = mp_obj_tuple_unary_op,
-            .binary_op = mp_obj_tuple_binary_op,
-            .subscr = mp_obj_tuple_subscr,
-            .getiter = mp_obj_tuple_getiter,
-            ),
-    },
+    NAMEDTUPLE_TYPE_BASE_AND_SLOTS(MP_QSTR_Glyph),
     .n_fields = 8,
     .fields = {
         MP_QSTR_bitmap,

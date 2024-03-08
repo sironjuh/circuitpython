@@ -39,23 +39,27 @@
 
 //| class SSLSocket:
 //|     """Implements TLS security on a subset of `socketpool.Socket` functions. Cannot be created
-//|        directly. Instead, call `wrap_socket` on an existing socket object.
+//|     directly. Instead, call `wrap_socket` on an existing socket object.
 //|
-//|        Provides a subset of CPython's `ssl.SSLSocket` API. It only implements the versions of
-//|        recv that do not allocate bytes objects."""
+//|     Provides a subset of CPython's `ssl.SSLSocket` API. It only implements the versions of
+//|     recv that do not allocate bytes objects."""
 //|
+
+//|     def __hash__(self) -> int:
+//|         """Returns a hash for the Socket."""
+//|         ...
+// Provided by automatic inclusion of hash()
+// https://github.com/micropython/micropython/pull/10348
 
 //|     def __enter__(self) -> SSLSocket:
 //|         """No-op used by Context Managers."""
 //|         ...
-//|
 //  Provided by context manager helper.
 
 //|     def __exit__(self) -> None:
 //|         """Automatically closes the Socket when exiting a context. See
 //|         :ref:`lifetime-and-contextmanagers` for more info."""
 //|         ...
-//|
 STATIC mp_obj_t ssl_sslsocket___exit__(size_t n_args, const mp_obj_t *args) {
     (void)n_args;
     common_hal_ssl_sslsocket_close(args[0]);
@@ -67,7 +71,6 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(ssl_sslsocket___exit___obj, 4, 4, ssl
 //|         """Accept a connection on a listening socket of type SOCK_STREAM,
 //|         creating a new socket of type SOCK_STREAM.
 //|         Returns a tuple of (new_socket, remote_address)"""
-//|
 STATIC mp_obj_t ssl_sslsocket_accept(mp_obj_t self_in) {
     ssl_sslsocket_obj_t *self = MP_OBJ_TO_PTR(self_in);
     uint8_t ip[4];
@@ -87,7 +90,6 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_1(ssl_sslsocket_accept_obj, ssl_sslsocket_accept)
 //|
 //|         :param ~tuple address: tuple of (remote_address, remote_port)"""
 //|         ...
-//|
 STATIC mp_obj_t ssl_sslsocket_bind(mp_obj_t self_in, mp_obj_t addr_in) {
     ssl_sslsocket_obj_t *self = MP_OBJ_TO_PTR(self_in);
 
@@ -98,12 +100,12 @@ STATIC mp_obj_t ssl_sslsocket_bind(mp_obj_t self_in, mp_obj_t addr_in) {
     const char *host = mp_obj_str_get_data(addr_items[0], &hostlen);
     mp_int_t port = mp_obj_get_int(addr_items[1]);
     if (port < 0) {
-        mp_raise_ValueError(translate("port must be >= 0"));
+        mp_raise_ValueError(MP_ERROR_TEXT("port must be >= 0"));
     }
 
-    bool ok = common_hal_ssl_sslsocket_bind(self, host, hostlen, (uint32_t)port);
-    if (!ok) {
-        mp_raise_ValueError(translate("Error: Failure to bind"));
+    size_t error = common_hal_ssl_sslsocket_bind(self, host, hostlen, (uint32_t)port);
+    if (error != 0) {
+        mp_raise_OSError(error);
     }
 
     return mp_const_none;
@@ -112,7 +114,6 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_2(ssl_sslsocket_bind_obj, ssl_sslsocket_bind);
 
 //|     def close(self) -> None:
 //|         """Closes this Socket"""
-//|
 STATIC mp_obj_t ssl_sslsocket_close(mp_obj_t self_in) {
     ssl_sslsocket_obj_t *self = MP_OBJ_TO_PTR(self_in);
     common_hal_ssl_sslsocket_close(self);
@@ -125,7 +126,6 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_1(ssl_sslsocket_close_obj, ssl_sslsocket_close);
 //|
 //|         :param ~tuple address: tuple of (remote_address, remote_port)"""
 //|         ...
-//|
 STATIC mp_obj_t ssl_sslsocket_connect(mp_obj_t self_in, mp_obj_t addr_in) {
     ssl_sslsocket_obj_t *self = MP_OBJ_TO_PTR(self_in);
 
@@ -136,7 +136,7 @@ STATIC mp_obj_t ssl_sslsocket_connect(mp_obj_t self_in, mp_obj_t addr_in) {
     const char *host = mp_obj_str_get_data(addr_items[0], &hostlen);
     mp_int_t port = mp_obj_get_int(addr_items[1]);
     if (port < 0) {
-        mp_raise_ValueError(translate("port must be >= 0"));
+        mp_raise_ValueError(MP_ERROR_TEXT("port must be >= 0"));
     }
 
     common_hal_ssl_sslsocket_connect(self, host, hostlen, (uint32_t)port);
@@ -150,7 +150,6 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_2(ssl_sslsocket_connect_obj, ssl_sslsocket_connec
 //|
 //|         :param ~int backlog: length of backlog queue for waiting connetions"""
 //|         ...
-//|
 STATIC mp_obj_t ssl_sslsocket_listen(mp_obj_t self_in, mp_obj_t backlog_in) {
     ssl_sslsocket_obj_t *self = MP_OBJ_TO_PTR(self_in);
 
@@ -174,7 +173,6 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_2(ssl_sslsocket_listen_obj, ssl_sslsocket_listen)
 //|         :param bytearray buffer: buffer to receive into
 //|         :param int bufsize: optionally, a maximum number of bytes to read."""
 //|         ...
-//|
 STATIC mp_obj_t ssl_sslsocket_recv_into(size_t n_args, const mp_obj_t *args) {
     ssl_sslsocket_obj_t *self = MP_OBJ_TO_PTR(args[0]);
     if (common_hal_ssl_sslsocket_get_closed(self)) {
@@ -191,7 +189,7 @@ STATIC mp_obj_t ssl_sslsocket_recv_into(size_t n_args, const mp_obj_t *args) {
     if (n_args == 3) {
         mp_int_t given_len = mp_obj_get_int(args[2]);
         if (given_len > len) {
-            mp_raise_ValueError(translate("buffer too small for requested bytes"));
+            mp_raise_ValueError(MP_ERROR_TEXT("buffer too small for requested bytes"));
         }
         if (given_len > 0 && given_len < len) {
             len = given_len;
@@ -213,7 +211,6 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(ssl_sslsocket_recv_into_obj, 2, 3, ss
 //|
 //|         :param ~bytes bytes: some bytes to send"""
 //|         ...
-//|
 STATIC mp_obj_t ssl_sslsocket_send(mp_obj_t self_in, mp_obj_t buf_in) {
     ssl_sslsocket_obj_t *self = MP_OBJ_TO_PTR(self_in);
     if (common_hal_ssl_sslsocket_get_closed(self)) {
@@ -244,9 +241,9 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_2(ssl_sslsocket_send_obj, ssl_sslsocket_send);
 //|     def settimeout(self, value: int) -> None:
 //|         """Set the timeout value for this socket.
 //|
-//|         :param ~int value: timeout in seconds.  0 means non-blocking.  None means block indefinitely."""
+//|         :param ~int value: timeout in seconds.  0 means non-blocking.  None means block indefinitely.
+//|         """
 //|         ...
-//|
 STATIC mp_obj_t ssl_sslsocket_settimeout(mp_obj_t self_in, mp_obj_t timeout_in) {
     ssl_sslsocket_obj_t *self = MP_OBJ_TO_PTR(self_in);
     mp_uint_t timeout_ms;
@@ -282,20 +279,6 @@ STATIC mp_obj_t ssl_sslsocket_setblocking(mp_obj_t self_in, mp_obj_t blocking) {
 }
 STATIC MP_DEFINE_CONST_FUN_OBJ_2(ssl_sslsocket_setblocking_obj, ssl_sslsocket_setblocking);
 
-//|     def __hash__(self) -> int:
-//|         """Returns a hash for the Socket."""
-//|         ...
-//|
-STATIC mp_obj_t ssl_sslsocket_unary_op(mp_unary_op_t op, mp_obj_t self_in) {
-    switch (op) {
-        case MP_UNARY_OP_HASH: {
-            return mp_obj_id(self_in);
-        }
-        default:
-            return MP_OBJ_NULL; // op not supported
-    }
-}
-
 STATIC const mp_rom_map_elem_t ssl_sslsocket_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR___enter__), MP_ROM_PTR(&default___enter___obj) },
     { MP_ROM_QSTR(MP_QSTR___exit__), MP_ROM_PTR(&ssl_sslsocket___exit___obj) },
@@ -315,12 +298,9 @@ STATIC const mp_rom_map_elem_t ssl_sslsocket_locals_dict_table[] = {
 
 STATIC MP_DEFINE_CONST_DICT(ssl_sslsocket_locals_dict, ssl_sslsocket_locals_dict_table);
 
-const mp_obj_type_t ssl_sslsocket_type = {
-    { &mp_type_type },
-    .flags = MP_TYPE_FLAG_EXTENDED,
-    .name = MP_QSTR_SSLSocket,
-    .locals_dict = (mp_obj_dict_t *)&ssl_sslsocket_locals_dict,
-    MP_TYPE_EXTENDED_FIELDS(
-        .unary_op = ssl_sslsocket_unary_op,
-        )
-};
+MP_DEFINE_CONST_OBJ_TYPE(
+    ssl_sslsocket_type,
+    MP_QSTR_SSLSocket,
+    MP_TYPE_FLAG_NONE,
+    locals_dict, &ssl_sslsocket_locals_dict
+    );

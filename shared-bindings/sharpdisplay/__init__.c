@@ -31,9 +31,11 @@
 
 #include "shared-bindings/sharpdisplay/SharpMemoryFramebuffer.h"
 
-//| """Support for Sharp Memory Display framebuffers"""
+//| """Support for Sharp Memory Display framebuffers
 //|
-
+//| For more information about working with Sharp Memory Displays,
+//| see `this Learn guide <https://learn.adafruit.com/adafruit-sharp-memory-display-breakout/circuitpython-displayio-setup>`_.
+//| """
 STATIC const mp_rom_map_elem_t sharpdisplay_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_sharpdisplay) },
     { MP_ROM_QSTR(MP_QSTR_SharpMemoryFramebuffer), MP_ROM_PTR(&sharpdisplay_framebuffer_type) },
@@ -46,4 +48,4 @@ const mp_obj_module_t sharpdisplay_module = {
     .globals = (mp_obj_dict_t *)&sharpdisplay_module_globals,
 };
 
-MP_REGISTER_MODULE(MP_QSTR_sharpdisplay, sharpdisplay_module, CIRCUITPY_SHARPDISPLAY);
+MP_REGISTER_MODULE(MP_QSTR_sharpdisplay, sharpdisplay_module);

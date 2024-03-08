@@ -35,10 +35,10 @@
 
 #include "shared/runtime/buffer_helper.h"
 #include "shared/runtime/context_manager_helpers.h"
+#include "py/binary.h"
 #include "py/mperrno.h"
 #include "py/objproperty.h"
 #include "py/runtime.h"
-#include "supervisor/shared/translate.h"
 
 
 //| class SPI:
@@ -51,10 +51,30 @@
 //|     `!MOSI`, `!MISO`. Its up to the client to manage the appropriate
 //|     select line, often abbreviated `!CS` or `!SS`. (This is common because
 //|     multiple secondaries can share the `!clock`, `!MOSI` and `!MISO` lines
-//|     and therefore the hardware.)"""
+//|     and therefore the hardware.)
 //|
-//|     def __init__(self, clock: microcontroller.Pin, MOSI: Optional[microcontroller.Pin] = None, MISO: Optional[microcontroller.Pin] = None) -> None:
+//|     .. raw:: html
 //|
+//|         <p>
+//|         <details>
+//|         <summary>Available on these boards</summary>
+//|         <ul>
+//|         {% for board in support_matrix_reverse["busio.SPI"] %}
+//|         <li> {{ board }}
+//|         {% endfor %}
+//|         </ul>
+//|         </details>
+//|         </p>
+//|
+//|     """
+//|
+//|     def __init__(
+//|         self,
+//|         clock: microcontroller.Pin,
+//|         MOSI: Optional[microcontroller.Pin] = None,
+//|         MISO: Optional[microcontroller.Pin] = None,
+//|         half_duplex: bool = False,
+//|     ) -> None:
 //|         """Construct an SPI object on the given pins.
 //|
 //|         .. note:: The SPI peripherals allocated in order of desirability, if possible,
@@ -74,37 +94,40 @@
 //|
 //|         :param ~microcontroller.Pin clock: the pin to use for the clock.
 //|         :param ~microcontroller.Pin MOSI: the Main Out Selected In pin.
-//|         :param ~microcontroller.Pin MISO: the Main In Selected Out pin."""
-//|         ...
+//|         :param ~microcontroller.Pin MISO: the Main In Selected Out pin.
+//|         :param bool half_duplex: True when MOSI is used for bidirectional data. False when SPI is full-duplex or simplex.
 //|
+//|         **Limitations:** ``half_duplex`` is available only on STM; other chips do not have the hardware support.
+//|         """
+//|         ...
 
 
 // TODO(tannewt): Support LSB SPI.
 STATIC mp_obj_t busio_spi_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *all_args) {
     #if CIRCUITPY_BUSIO_SPI
-    busio_spi_obj_t *self = m_new_obj(busio_spi_obj_t);
-    self->base.type = &busio_spi_type;
-    enum { ARG_clock, ARG_MOSI, ARG_MISO };
+    busio_spi_obj_t *self = mp_obj_malloc(busio_spi_obj_t, &busio_spi_type);
+    enum { ARG_clock, ARG_MOSI, ARG_MISO, ARG_half_duplex };
     static const mp_arg_t allowed_args[] = {
         { MP_QSTR_clock, MP_ARG_REQUIRED | MP_ARG_OBJ },
         { MP_QSTR_MOSI, MP_ARG_OBJ, {.u_obj = mp_const_none} },
         { MP_QSTR_MISO, MP_ARG_OBJ, {.u_obj = mp_const_none} },
+        { MP_QSTR_half_duplex, MP_ARG_OBJ | MP_ARG_KW_ONLY, {.u_bool = false} },
     };
     mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
     mp_arg_parse_all_kw_array(n_args, n_kw, all_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
 
-    const mcu_pin_obj_t *clock = validate_obj_is_free_pin(args[ARG_clock].u_obj);
-    const mcu_pin_obj_t *mosi = validate_obj_is_free_pin_or_none(args[ARG_MOSI].u_obj);
-    const mcu_pin_obj_t *miso = validate_obj_is_free_pin_or_none(args[ARG_MISO].u_obj);
+    const mcu_pin_obj_t *clock = validate_obj_is_free_pin(args[ARG_clock].u_obj, MP_QSTR_clock);
+    const mcu_pin_obj_t *mosi = validate_obj_is_free_pin_or_none(args[ARG_MOSI].u_obj, MP_QSTR_mosi);
+    const mcu_pin_obj_t *miso = validate_obj_is_free_pin_or_none(args[ARG_MISO].u_obj, MP_QSTR_miso);
 
     if (!miso && !mosi) {
-        mp_raise_ValueError(translate("Must provide MISO or MOSI pin"));
+        mp_raise_ValueError(MP_ERROR_TEXT("Must provide MISO or MOSI pin"));
     }
 
-    common_hal_busio_spi_construct(self, clock, mosi, miso);
+    common_hal_busio_spi_construct(self, clock, mosi, miso, args[ARG_half_duplex].u_bool);
     return MP_OBJ_FROM_PTR(self);
     #else
-    mp_raise_ValueError(translate("Invalid pins"));
+    raise_ValueError_invalid_pins();
     #endif // CIRCUITPY_BUSIO_SPI
 }
 
@@ -112,7 +135,6 @@ STATIC mp_obj_t busio_spi_make_new(const mp_obj_type_t *type, size_t n_args, siz
 //|     def deinit(self) -> None:
 //|         """Turn off the SPI bus."""
 //|         ...
-//|
 STATIC mp_obj_t busio_spi_obj_deinit(mp_obj_t self_in) {
     busio_spi_obj_t *self = MP_OBJ_TO_PTR(self_in);
     common_hal_busio_spi_deinit(self);
@@ -124,13 +146,11 @@ MP_DEFINE_CONST_FUN_OBJ_1(busio_spi_deinit_obj, busio_spi_obj_deinit);
 //|         """No-op used by Context Managers.
 //|         Provided by context manager helper."""
 //|         ...
-//|
 
 //|     def __exit__(self) -> None:
 //|         """Automatically deinitializes the hardware when exiting a context. See
 //|         :ref:`lifetime-and-contextmanagers` for more info."""
 //|         ...
-//|
 STATIC mp_obj_t busio_spi_obj___exit__(size_t n_args, const mp_obj_t *args) {
     (void)n_args;
     common_hal_busio_spi_deinit(MP_OBJ_TO_PTR(args[0]));
@@ -141,7 +161,7 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(busio_spi_obj___exit___obj, 4, 4, bus
 STATIC void check_lock(busio_spi_obj_t *self) {
     asm ("");
     if (!common_hal_busio_spi_has_lock(self)) {
-        mp_raise_RuntimeError(translate("Function requires lock"));
+        mp_raise_RuntimeError(MP_ERROR_TEXT("Function requires lock"));
     }
 }
 
@@ -151,7 +171,9 @@ STATIC void check_for_deinit(busio_spi_obj_t *self) {
     }
 }
 
-//|     def configure(self, *, baudrate: int = 100000, polarity: int = 0, phase: int = 0, bits: int = 8) -> None:
+//|     def configure(
+//|         self, *, baudrate: int = 100000, polarity: int = 0, phase: int = 0, bits: int = 8
+//|     ) -> None:
 //|         """Configures the SPI bus. The SPI object must be locked.
 //|
 //|         :param int baudrate: the desired clock rate in Hertz. The actual clock rate may be higher or lower
@@ -173,7 +195,6 @@ STATIC void check_for_deinit(busio_spi_obj_t *self) {
 //|           Two SPI objects may be created, except on the Circuit Playground Bluefruit,
 //|           which allows only one (to allow for an additional I2C object)."""
 //|         ...
-//|
 
 STATIC mp_obj_t busio_spi_configure(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
     enum { ARG_baudrate, ARG_polarity, ARG_phase, ARG_bits };
@@ -189,18 +210,9 @@ STATIC mp_obj_t busio_spi_configure(size_t n_args, const mp_obj_t *pos_args, mp_
     mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
     mp_arg_parse_all(n_args - 1, pos_args + 1, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
 
-    uint8_t polarity = args[ARG_polarity].u_int;
-    if (polarity != 0 && polarity != 1) {
-        mp_raise_ValueError(translate("Invalid polarity"));
-    }
-    uint8_t phase = args[ARG_phase].u_int;
-    if (phase != 0 && phase != 1) {
-        mp_raise_ValueError(translate("Invalid phase"));
-    }
-    uint8_t bits = args[ARG_bits].u_int;
-    if (bits != 8 && bits != 9) {
-        mp_raise_ValueError(translate("Invalid number of bits"));
-    }
+    uint8_t polarity = (uint8_t)mp_arg_validate_int_range(args[ARG_polarity].u_int, 0, 1, MP_QSTR_polarity);
+    uint8_t phase = (uint8_t)mp_arg_validate_int_range(args[ARG_phase].u_int, 0, 1, MP_QSTR_phase);
+    uint8_t bits = (uint8_t)mp_arg_validate_int_range(args[ARG_bits].u_int, 8, 9, MP_QSTR_bits);
 
     if (!common_hal_busio_spi_configure(self, args[ARG_baudrate].u_int,
         polarity, phase, bits)) {
@@ -216,7 +228,6 @@ MP_DEFINE_CONST_FUN_OBJ_KW(busio_spi_configure_obj, 1, busio_spi_configure);
 //|         :return: True when lock has been grabbed
 //|         :rtype: bool"""
 //|         ...
-//|
 
 STATIC mp_obj_t busio_spi_obj_try_lock(mp_obj_t self_in) {
     busio_spi_obj_t *self = MP_OBJ_TO_PTR(self_in);
@@ -227,7 +238,6 @@ MP_DEFINE_CONST_FUN_OBJ_1(busio_spi_try_lock_obj, busio_spi_obj_try_lock);
 //|     def unlock(self) -> None:
 //|         """Releases the SPI lock."""
 //|         ...
-//|
 
 STATIC mp_obj_t busio_spi_obj_unlock(mp_obj_t self_in) {
     busio_spi_obj_t *self = MP_OBJ_TO_PTR(self_in);
@@ -251,7 +261,6 @@ MP_DEFINE_CONST_FUN_OBJ_1(busio_spi_unlock_obj, busio_spi_obj_unlock);
 //|         :param int end: end of buffer slice; if not specified, use ``len(buffer)``
 //|         """
 //|         ...
-//|
 
 STATIC mp_obj_t busio_spi_write(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
     enum { ARG_buffer, ARG_start, ARG_end };
@@ -268,9 +277,15 @@ STATIC mp_obj_t busio_spi_write(size_t n_args, const mp_obj_t *pos_args, mp_map_
 
     mp_buffer_info_t bufinfo;
     mp_get_buffer_raise(args[ARG_buffer].u_obj, &bufinfo, MP_BUFFER_READ);
+    // Compute bounds in terms of elements, not bytes.
+    int stride_in_bytes = mp_binary_get_size('@', bufinfo.typecode, NULL);
     int32_t start = args[ARG_start].u_int;
-    size_t length = bufinfo.len;
+    size_t length = bufinfo.len / stride_in_bytes;
     normalize_buffer_bounds(&start, args[ARG_end].u_int, &length);
+
+    // Treat start and length in terms of bytes from now on.
+    start *= stride_in_bytes;
+    length *= stride_in_bytes;
 
     if (length == 0) {
         return mp_const_none;
@@ -286,7 +301,14 @@ MP_DEFINE_CONST_FUN_OBJ_KW(busio_spi_write_obj, 1, busio_spi_write);
 
 
 //|     import sys
-//|     def readinto(self, buffer: WriteableBuffer, *, start: int = 0, end: int = sys.maxsize, write_value: int = 0) -> None:
+//|     def readinto(
+//|         self,
+//|         buffer: WriteableBuffer,
+//|         *,
+//|         start: int = 0,
+//|         end: int = sys.maxsize,
+//|         write_value: int = 0
+//|     ) -> None:
 //|         """Read into ``buffer`` while writing ``write_value`` for each byte read.
 //|         The SPI object must be locked.
 //|         If the number of bytes to read is 0, nothing happens.
@@ -297,11 +319,12 @@ MP_DEFINE_CONST_FUN_OBJ_KW(busio_spi_write_obj, 1, busio_spi_write);
 //|
 //|         :param WriteableBuffer buffer: read bytes into this buffer
 //|         :param int start: beginning of buffer slice
-//|         :param int end: end of buffer slice; if not specified, use ``len(buffer)``
+//|         :param int end: end of buffer slice; if not specified, it will be the equivalent value
+//|             of ``len(buffer)`` and for any value provided it will take the value of
+//|             ``min(end, len(buffer))``
 //|         :param int write_value: value to write while reading
 //|         """
 //|         ...
-//|
 
 STATIC mp_obj_t busio_spi_readinto(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
     enum { ARG_buffer, ARG_start, ARG_end, ARG_write_value };
@@ -309,7 +332,7 @@ STATIC mp_obj_t busio_spi_readinto(size_t n_args, const mp_obj_t *pos_args, mp_m
         { MP_QSTR_buffer,     MP_ARG_REQUIRED | MP_ARG_OBJ, {.u_obj = MP_OBJ_NULL} },
         { MP_QSTR_start,      MP_ARG_KW_ONLY | MP_ARG_INT, {.u_int = 0} },
         { MP_QSTR_end,        MP_ARG_KW_ONLY | MP_ARG_INT, {.u_int = INT_MAX} },
-        { MP_QSTR_write_value,MP_ARG_KW_ONLY | MP_ARG_INT, {.u_int = 0} },
+        { MP_QSTR_write_value, MP_ARG_KW_ONLY | MP_ARG_INT, {.u_int = 0} },
     };
     busio_spi_obj_t *self = MP_OBJ_TO_PTR(pos_args[0]);
     check_for_deinit(self);
@@ -319,9 +342,15 @@ STATIC mp_obj_t busio_spi_readinto(size_t n_args, const mp_obj_t *pos_args, mp_m
 
     mp_buffer_info_t bufinfo;
     mp_get_buffer_raise(args[ARG_buffer].u_obj, &bufinfo, MP_BUFFER_WRITE);
+    // Compute bounds in terms of elements, not bytes.
+    int stride_in_bytes = mp_binary_get_size('@', bufinfo.typecode, NULL);
     int32_t start = args[ARG_start].u_int;
-    size_t length = bufinfo.len;
+    size_t length = bufinfo.len / stride_in_bytes;
     normalize_buffer_bounds(&start, args[ARG_end].u_int, &length);
+
+    // Treat start and length in terms of bytes from now on.
+    start *= stride_in_bytes;
+    length *= stride_in_bytes;
 
     if (length == 0) {
         return mp_const_none;
@@ -336,7 +365,16 @@ STATIC mp_obj_t busio_spi_readinto(size_t n_args, const mp_obj_t *pos_args, mp_m
 MP_DEFINE_CONST_FUN_OBJ_KW(busio_spi_readinto_obj, 1, busio_spi_readinto);
 
 //|     import sys
-//|     def write_readinto(self, out_buffer: ReadableBuffer, in_buffer: WriteableBuffer, *, out_start: int = 0, out_end: int = sys.maxsize, in_start: int = 0, in_end: int = sys.maxsize) -> None:
+//|     def write_readinto(
+//|         self,
+//|         out_buffer: ReadableBuffer,
+//|         in_buffer: WriteableBuffer,
+//|         *,
+//|         out_start: int = 0,
+//|         out_end: int = sys.maxsize,
+//|         in_start: int = 0,
+//|         in_end: int = sys.maxsize
+//|     ) -> None:
 //|         """Write out the data in ``out_buffer`` while simultaneously reading data into ``in_buffer``.
 //|         The SPI object must be locked.
 //|
@@ -360,7 +398,6 @@ MP_DEFINE_CONST_FUN_OBJ_KW(busio_spi_readinto_obj, 1, busio_spi_readinto);
 //|         :param int in_end: end of ``in_buffer slice``; if not specified, use ``len(in_buffer)``
 //|         """
 //|         ...
-//|
 
 STATIC mp_obj_t busio_spi_write_readinto(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
     enum { ARG_out_buffer, ARG_in_buffer, ARG_out_start, ARG_out_end, ARG_in_start, ARG_in_end };
@@ -380,18 +417,26 @@ STATIC mp_obj_t busio_spi_write_readinto(size_t n_args, const mp_obj_t *pos_args
 
     mp_buffer_info_t buf_out_info;
     mp_get_buffer_raise(args[ARG_out_buffer].u_obj, &buf_out_info, MP_BUFFER_READ);
+    int out_stride_in_bytes = mp_binary_get_size('@', buf_out_info.typecode, NULL);
     int32_t out_start = args[ARG_out_start].u_int;
-    size_t out_length = buf_out_info.len;
+    size_t out_length = buf_out_info.len / out_stride_in_bytes;
     normalize_buffer_bounds(&out_start, args[ARG_out_end].u_int, &out_length);
 
     mp_buffer_info_t buf_in_info;
     mp_get_buffer_raise(args[ARG_in_buffer].u_obj, &buf_in_info, MP_BUFFER_WRITE);
+    int in_stride_in_bytes = mp_binary_get_size('@', buf_in_info.typecode, NULL);
     int32_t in_start = args[ARG_in_start].u_int;
-    size_t in_length = buf_in_info.len;
+    size_t in_length = buf_in_info.len / in_stride_in_bytes;
     normalize_buffer_bounds(&in_start, args[ARG_in_end].u_int, &in_length);
 
+    // Treat start and length in terms of bytes from now on.
+    out_start *= out_stride_in_bytes;
+    out_length *= out_stride_in_bytes;
+    in_start *= in_stride_in_bytes;
+    in_length *= in_stride_in_bytes;
+
     if (out_length != in_length) {
-        mp_raise_ValueError(translate("buffer slices must be of equal length"));
+        mp_raise_ValueError(MP_ERROR_TEXT("buffer slices must be of equal length"));
     }
 
     if (out_length == 0) {
@@ -421,12 +466,8 @@ STATIC mp_obj_t busio_spi_obj_get_frequency(mp_obj_t self_in) {
 }
 MP_DEFINE_CONST_FUN_OBJ_1(busio_spi_get_frequency_obj, busio_spi_obj_get_frequency);
 
-const mp_obj_property_t busio_spi_frequency_obj = {
-    .base.type = &mp_type_property,
-    .proxy = {(mp_obj_t)&busio_spi_get_frequency_obj,
-              MP_ROM_NONE,
-              MP_ROM_NONE},
-};
+MP_PROPERTY_GETTER(busio_spi_frequency_obj,
+    (mp_obj_t)&busio_spi_get_frequency_obj);
 #endif // CIRCUITPY_BUSIO_SPI
 
 
@@ -448,16 +489,14 @@ STATIC const mp_rom_map_elem_t busio_spi_locals_dict_table[] = {
 };
 STATIC MP_DEFINE_CONST_DICT(busio_spi_locals_dict, busio_spi_locals_dict_table);
 
-const mp_obj_type_t busio_spi_type = {
-    { &mp_type_type },
-    .name = MP_QSTR_SPI,
-    .make_new = busio_spi_make_new,
-    .locals_dict = (mp_obj_dict_t *)&busio_spi_locals_dict,
-};
+MP_DEFINE_CONST_OBJ_TYPE(
+    busio_spi_type,
+    MP_QSTR_SPI,
+    MP_TYPE_FLAG_HAS_SPECIAL_ACCESSORS,
+    make_new, busio_spi_make_new,
+    locals_dict, &busio_spi_locals_dict
+    );
 
-busio_spi_obj_t *validate_obj_is_spi_bus(mp_obj_t obj) {
-    if (!mp_obj_is_type(obj, &busio_spi_type)) {
-        mp_raise_TypeError_varg(translate("Expected a %q"), busio_spi_type.name);
-    }
-    return MP_OBJ_TO_PTR(obj);
+busio_spi_obj_t *validate_obj_is_spi_bus(mp_obj_t obj, qstr arg_name) {
+    return mp_arg_validate_type(obj, &busio_spi_type, arg_name);
 }

@@ -42,9 +42,8 @@
 //|     def __init__(self, address: Union[int, str, bytes]) -> None:
 //|         """Create a new IPv4Address object encapsulating the address value.
 //|
-//|            The value itself can either be bytes or a string formatted address."""
+//|         The value itself can either be bytes or a string formatted address."""
 //|         ...
-//|
 STATIC mp_obj_t ipaddress_ipv4address_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *all_args) {
     enum { ARG_address };
     static const mp_arg_t allowed_args[] = {
@@ -64,22 +63,21 @@ STATIC mp_obj_t ipaddress_ipv4address_make_new(const mp_obj_type_t *type, size_t
     } else if (mp_obj_is_str(address)) {
         GET_STR_DATA_LEN(address, str_data, str_len);
         if (!ipaddress_parse_ipv4address((const char *)str_data, str_len, &value)) {
-            mp_raise_ValueError(translate("Not a valid IP string"));
+            mp_raise_ValueError(MP_ERROR_TEXT("Not a valid IP string"));
         }
         buf = (uint8_t *)&value;
     } else {
         mp_buffer_info_t buf_info;
         if (mp_get_buffer(address, &buf_info, MP_BUFFER_READ)) {
             if (buf_info.len != 4) {
-                mp_raise_ValueError_varg(translate("Address must be %d bytes long"), 4);
+                mp_raise_ValueError_varg(MP_ERROR_TEXT("Address must be %d bytes long"), 4);
             }
             buf = buf_info.buf;
         }
     }
 
 
-    ipaddress_ipv4address_obj_t *self = m_new_obj(ipaddress_ipv4address_obj_t);
-    self->base.type = &ipaddress_ipv4address_type;
+    ipaddress_ipv4address_obj_t *self = mp_obj_malloc(ipaddress_ipv4address_obj_t, &ipaddress_ipv4address_type);
 
     common_hal_ipaddress_ipv4address_construct(self, buf, 4);
 
@@ -88,7 +86,6 @@ STATIC mp_obj_t ipaddress_ipv4address_make_new(const mp_obj_type_t *type, size_t
 
 //|     packed: bytes
 //|     """The bytes that make up the address (read-only)."""
-//|
 STATIC mp_obj_t ipaddress_ipv4address_get_packed(mp_obj_t self_in) {
     ipaddress_ipv4address_obj_t *self = MP_OBJ_TO_PTR(self_in);
 
@@ -96,16 +93,11 @@ STATIC mp_obj_t ipaddress_ipv4address_get_packed(mp_obj_t self_in) {
 }
 MP_DEFINE_CONST_FUN_OBJ_1(ipaddress_ipv4address_get_packed_obj, ipaddress_ipv4address_get_packed);
 
-const mp_obj_property_t ipaddress_ipv4address_packed_obj = {
-    .base.type = &mp_type_property,
-    .proxy = {(mp_obj_t)&ipaddress_ipv4address_get_packed_obj,
-              MP_ROM_NONE,
-              MP_ROM_NONE},
-};
+MP_PROPERTY_GETTER(ipaddress_ipv4address_packed_obj,
+    (mp_obj_t)&ipaddress_ipv4address_get_packed_obj);
 
 //|     version: int
 //|     """4 for IPv4, 6 for IPv6"""
-//|
 STATIC mp_obj_t ipaddress_ipv4address_get_version(mp_obj_t self_in) {
     ipaddress_ipv4address_obj_t *self = MP_OBJ_TO_PTR(self_in);
     mp_buffer_info_t buf_info;
@@ -120,17 +112,12 @@ STATIC mp_obj_t ipaddress_ipv4address_get_version(mp_obj_t self_in) {
 }
 MP_DEFINE_CONST_FUN_OBJ_1(ipaddress_ipv4address_get_version_obj, ipaddress_ipv4address_get_version);
 
-const mp_obj_property_t ipaddress_ipv4address_version_obj = {
-    .base.type = &mp_type_property,
-    .proxy = {(mp_obj_t)&ipaddress_ipv4address_get_version_obj,
-              MP_ROM_NONE,
-              MP_ROM_NONE},
-};
+MP_PROPERTY_GETTER(ipaddress_ipv4address_version_obj,
+    (mp_obj_t)&ipaddress_ipv4address_get_version_obj);
 
 //|     def __eq__(self, other: object) -> bool:
 //|         """Two Address objects are equal if their addresses and address types are equal."""
 //|         ...
-//|
 STATIC mp_obj_t ipaddress_ipv4address_binary_op(mp_binary_op_t op, mp_obj_t lhs_in, mp_obj_t rhs_in) {
     switch (op) {
         // Two Addresses are equal if their address bytes and address_type are equal
@@ -188,15 +175,13 @@ STATIC const mp_rom_map_elem_t ipaddress_ipv4address_locals_dict_table[] = {
 
 STATIC MP_DEFINE_CONST_DICT(ipaddress_ipv4address_locals_dict, ipaddress_ipv4address_locals_dict_table);
 
-const mp_obj_type_t ipaddress_ipv4address_type = {
-    { &mp_type_type },
-    .flags = MP_TYPE_FLAG_EXTENDED,
-    .name = MP_QSTR_Address,
-    .make_new = ipaddress_ipv4address_make_new,
-    .locals_dict = (mp_obj_dict_t *)&ipaddress_ipv4address_locals_dict,
-    .print = ipaddress_ipv4address_print,
-    MP_TYPE_EXTENDED_FIELDS(
-        .unary_op = ipaddress_ipv4address_unary_op,
-        .binary_op = ipaddress_ipv4address_binary_op,
-        )
-};
+MP_DEFINE_CONST_OBJ_TYPE(
+    ipaddress_ipv4address_type,
+    MP_QSTR_Address,
+    MP_TYPE_FLAG_HAS_SPECIAL_ACCESSORS,
+    make_new, ipaddress_ipv4address_make_new,
+    locals_dict, &ipaddress_ipv4address_locals_dict,
+    print, ipaddress_ipv4address_print,
+    unary_op, ipaddress_ipv4address_unary_op,
+    binary_op, ipaddress_ipv4address_binary_op
+    );

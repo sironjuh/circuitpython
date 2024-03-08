@@ -38,9 +38,16 @@
 //| The `adafruit_pixelbuf` module provides the :py:class:`PixelBuf` class to accelerate
 //| RGB(W) strip/matrix manipulation, such as DotStar and Neopixel.
 //|
-//| Also available as ``_pixelbuf``. This usage has been deprecated.
-//|
 //| Byteorders are configured with strings, such as "RGB" or "RGBD"."""
+//|
+//| # The types accepted when getting a pixel value
+//| PixelReturnType = Union[
+//|     Tuple[int, int, int], Tuple[int, int, int, int], Tuple[int, int, int, float]
+//| ]
+//| PixelReturnSequence = Tuple[PixelReturnType]
+//| # The types returned when getting a pixel value
+//| PixelType = Union[int, PixelReturnType]
+//| PixelSequence = Union[Tuple[PixelType], List[PixelType]]
 // TODO: Pull in docs from adafruit_pixelbuf.
 
 STATIC const mp_rom_map_elem_t pixelbuf_module_globals_table[] = {
@@ -55,4 +62,4 @@ const mp_obj_module_t pixelbuf_module = {
     .globals = (mp_obj_dict_t *)&pixelbuf_module_globals,
 };
 
-MP_REGISTER_MODULE(MP_QSTR_adafruit_pixelbuf, pixelbuf_module, CIRCUITPY_PIXELBUF);
+MP_REGISTER_MODULE(MP_QSTR_adafruit_pixelbuf, pixelbuf_module);

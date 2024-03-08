@@ -27,7 +27,6 @@
 
 #include "py/builtin.h"
 #include "py/runtime.h"
-#include "supervisor/shared/translate.h"
 
 #if MICROPY_PY_BUILTINS_FLOAT
 
@@ -41,11 +40,13 @@
 //| """mathematical functions
 //|
 //| The `math` module provides some basic mathematical functions for
-//| working with floating-point numbers."""
+//| working with floating-point numbers.
 //|
+//| |see_cpython_module| :mod:`cpython:math`.
+//| """
 
 STATIC NORETURN void math_error(void) {
-    mp_raise_ValueError(translate("math domain error"));
+    mp_raise_ValueError(MP_ERROR_TEXT("math domain error"));
 }
 
 #define MATH_FUN_1(py_name, c_name) \
@@ -157,6 +158,11 @@ STATIC NORETURN void math_error(void) {
 //|     """Return ``x * (2**exp)``."""
 //|     ...
 //|
+//| def log(x: float, base: float = e) -> float:
+//|     """Return the logarithm of x to the given base. If base is not specified,
+//|     returns the natural logarithm (base e) of x"""
+//|     ...
+//|
 //| def modf(x: float) -> Tuple[float, float]:
 //|     """Return a tuple of two floats, being the fractional and integral parts of
 //|     ``x``.  Both return values have the same sign as ``x``."""
@@ -191,55 +197,82 @@ MATH_FUN_2(pow, pow)
 MATH_FUN_1(exp, exp)
 #if MICROPY_PY_MATH_SPECIAL_FUNCTIONS
 //| def expm1(x: float) -> float:
-//|     """Return ``exp(x) - 1``."""
+//|     """Return ``exp(x) - 1``.
+//|
+//|     May not be available on some boards.
+//|     """
 //|     ...
 //|
 MATH_FUN_1(expm1, expm1)
 
 //| def log2(x: float) -> float:
-//|     """Return the base-2 logarithm of ``x``."""
+//|     """Return the base-2 logarithm of ``x``.
+//|
+//|     May not be available on some boards.
+//|     """
 //|     ...
 //|
 MATH_FUN_1_ERRCOND(log2, log2, (x <= (mp_float_t)0.0))
 
 //| def log10(x: float) -> float:
-//|     """Return the base-10 logarithm of ``x``."""
+//|     """Return the base-10 logarithm of ``x``.
+//|
+//|     May not be available on some boards.
+//|     """
 //|     ...
 //|
 MATH_FUN_1_ERRCOND(log10, log10, (x <= (mp_float_t)0.0))
 
 //| def cosh(x: float) -> float:
-//|     """Return the hyperbolic cosine of ``x``."""
+//|     """Return the hyperbolic cosine of ``x``.
+//|
+//|     May not be available on some boards.
+//|     """
 //|     ...
 //|
 MATH_FUN_1(cosh, cosh)
 
 //| def sinh(x: float) -> float:
-//|     """Return the hyperbolic sine of ``x``."""
+//|     """Return the hyperbolic sine of ``x``.
+//|
+//|     May not be available on some boards.
+//|     """
 //|     ...
 //|
 MATH_FUN_1(sinh, sinh)
 
 //| def tanh(x: float) -> float:
-//|     """Return the hyperbolic tangent of ``x``."""
+//|     """Return the hyperbolic tangent of ``x``.
+//|
+//|     May not be available on some boards.
+//|     """
 //|     ...
 //|
 MATH_FUN_1(tanh, tanh)
 
 //| def acosh(x: float) -> float:
-//|     """Return the inverse hyperbolic cosine of ``x``."""
+//|     """Return the inverse hyperbolic cosine of ``x``.
+//|
+//|     May not be available on some boards.
+//|     """
 //|     ...
 //|
 MATH_FUN_1(acosh, acosh)
 
 //| def asinh(x: float) -> float:
-//|     """Return the inverse hyperbolic sine of ``x``."""
+//|     """Return the inverse hyperbolic sine of ``x``.
+//|
+//|     May not be available on some boards.
+//|     """
 //|     ...
 //|
 MATH_FUN_1(asinh, asinh)
 
 //| def atanh(x: float) -> float:
-//|     """Return the inverse hyperbolic tangent of ``x``."""
+//|     """Return the inverse hyperbolic tangent of ``x``.
+//|
+//|     May not be available on some boards.
+//|     """
 //|     ...
 //|
 MATH_FUN_1(atanh, atanh)
@@ -281,25 +314,37 @@ MATH_FUN_2(ldexp, ldexp)
 #if MICROPY_PY_MATH_SPECIAL_FUNCTIONS
 
 //| def erf(x: float) -> float:
-//|     """Return the error function of ``x``."""
+//|     """Return the error function of ``x``.
+//|
+//|     May not be available on some boards.
+//|     """
 //|     ...
 //|
 MATH_FUN_1(erf, erf)
 
 //| def erfc(x: float) -> float:
-//|     """Return the complementary error function of ``x``."""
+//|     """Return the complementary error function of ``x``.
+//|
+//|     May not be available on some boards.
+//|     """
 //|     ...
 //|
 MATH_FUN_1(erfc, erfc)
 
 //| def gamma(x: float) -> float:
-//|     """Return the gamma function of ``x``."""
+//|     """Return the gamma function of ``x``.
+//|
+//|     May not be available on some boards.
+//|     """
 //|     ...
 //|
 MATH_FUN_1(gamma, tgamma)
 
 //| def lgamma(x: float) -> float:
-//|     """Return the natural logarithm of the gamma function of ``x``."""
+//|     """Return the natural logarithm of the gamma function of ``x``.
+//|
+//|     May not be available on some boards.
+//|     """
 //|     ...
 //|
 MATH_FUN_1(lgamma, lgamma)
@@ -326,7 +371,7 @@ STATIC mp_obj_t mp_math_log(size_t n_args, const mp_obj_t *args) {
             #pragma GCC diagnostic ignored "-Wfloat-equal"
         } else if (base == (mp_float_t)1.0) {
             #pragma GCC diagnostic pop
-            mp_raise_msg(&mp_type_ZeroDivisionError, translate("division by zero"));
+            math_error();
         }
         return mp_obj_new_float(l / MICROPY_FLOAT_C_FUN(log)(base));
     }
@@ -427,6 +472,6 @@ const mp_obj_module_t math_module = {
     .globals = (mp_obj_dict_t *)&mp_module_math_globals,
 };
 
-MP_REGISTER_MODULE(MP_QSTR_math, math_module, CIRCUITPY_MATH);
+MP_REGISTER_MODULE(MP_QSTR_math, math_module);
 
 #endif // MICROPY_PY_BUILTINS_FLOAT

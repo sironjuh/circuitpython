@@ -35,7 +35,6 @@
 #include "py/runtime.h"
 #include "shared-bindings/pulseio/PulseOut.h"
 #include "shared-bindings/pwmio/PWMOut.h"
-#include "supervisor/shared/translate.h"
 
 // A single timer is shared amongst all PulseOut objects under the assumption that
 // the code is single threaded.
@@ -74,6 +73,11 @@ static void pulseout_event_handler(nrf_timer_event_t event_type, void *p_context
     nrfx_timer_pause(timer);
 
     pulse_array_index++;
+    // Ignore a zero-length pulse
+    while (pulse_array_index < pulse_array_length &&
+           pulse_array[pulse_array_index] == 0) {
+        pulse_array_index++;
+    }
 
     // No more pulses. Turn off output and don't restart.
     if (pulse_array_index >= pulse_array_length) {
@@ -90,13 +94,6 @@ static void pulseout_event_handler(nrf_timer_event_t event_type, void *p_context
 
     // Count up to the next given value.
     start_timer();
-}
-
-void pulseout_reset() {
-    if (timer != NULL) {
-        nrf_peripherals_free_timer(timer);
-    }
-    refcount = 0;
 }
 
 void common_hal_pulseio_pulseout_construct(pulseio_pulseout_obj_t *self,

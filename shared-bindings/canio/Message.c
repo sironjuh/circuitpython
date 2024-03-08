@@ -41,7 +41,6 @@
 //|         In CAN, messages can have a length from 0 to 8 bytes.
 //|         """
 //|         ...
-//|
 STATIC mp_obj_t canio_message_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *all_args) {
     enum { ARG_id, ARG_data, ARG_extended, NUM_ARGS };
     static const mp_arg_t allowed_args[] = {
@@ -57,19 +56,15 @@ STATIC mp_obj_t canio_message_make_new(const mp_obj_type_t *type, size_t n_args,
     mp_buffer_info_t data;
     mp_get_buffer_raise(args[ARG_data].u_obj, &data, MP_BUFFER_READ);
 
-    if (data.len > 8) {
-        mp_raise_ValueError(translate("Messages limited to 8 bytes"));
-    }
+    mp_arg_validate_length_range(data.len, 0, 8, MP_QSTR_data);
 
-    canio_message_obj_t *self = m_new_obj(canio_message_obj_t);
-    self->base.type = &canio_message_type;
+    canio_message_obj_t *self = mp_obj_malloc(canio_message_obj_t, &canio_message_type);
     common_hal_canio_message_construct(self, args[ARG_id].u_int, data.buf, data.len, args[ARG_extended].u_bool);
     return self;
 }
 
 //|     id: int
 //|     """The numeric ID of the message"""
-//|
 STATIC mp_obj_t canio_message_id_get(const mp_obj_t self_in) {
     canio_message_obj_t *self = self_in;
     return MP_OBJ_NEW_SMALL_INT(common_hal_canio_message_get_id(self));
@@ -83,16 +78,12 @@ STATIC mp_obj_t canio_message_id_set(const mp_obj_t self_in, const mp_obj_t id) 
 }
 MP_DEFINE_CONST_FUN_OBJ_2(canio_message_id_set_obj, canio_message_id_set);
 
-STATIC const mp_obj_property_t canio_message_id_obj = {
-    .base.type = &mp_type_property,
-    .proxy = {(mp_obj_t)&canio_message_id_get_obj,
-              (mp_obj_t)&canio_message_id_set_obj,
-              MP_ROM_NONE},
-};
+MP_PROPERTY_GETSET(canio_message_id_obj,
+    (mp_obj_t)&canio_message_id_get_obj,
+    (mp_obj_t)&canio_message_id_set_obj);
 
 //|     data: bytes
 //|     """The content of the message"""
-//|
 STATIC mp_obj_t canio_message_data_get(const mp_obj_t self_in) {
     canio_message_obj_t *self = self_in;
     return mp_obj_new_bytes((const byte *)common_hal_canio_message_get_data(self), common_hal_canio_message_get_length(self));
@@ -103,21 +94,18 @@ STATIC mp_obj_t canio_message_data_set(const mp_obj_t self_in, const mp_obj_t da
     canio_message_obj_t *self = self_in;
     mp_buffer_info_t data;
     mp_get_buffer_raise(data_in, &data, MP_BUFFER_READ);
-    if (data.len > 8) {
-        mp_raise_ValueError(translate("Messages limited to 8 bytes"));
-    }
+
+    mp_arg_validate_length_range(data.len, 0, 8, MP_QSTR_data);
+
     common_hal_canio_message_set_data(self, data.buf, data.len);
     return mp_const_none;
 }
 MP_DEFINE_CONST_FUN_OBJ_2(canio_message_data_set_obj, canio_message_data_set);
 
 
-STATIC const mp_obj_property_t canio_message_data_obj = {
-    .base.type = &mp_type_property,
-    .proxy = {(mp_obj_t)&canio_message_data_get_obj,
-              (mp_obj_t)&canio_message_data_set_obj,
-              MP_ROM_NONE},
-};
+MP_PROPERTY_GETSET(canio_message_data_obj,
+    (mp_obj_t)&canio_message_data_get_obj,
+    (mp_obj_t)&canio_message_data_set_obj);
 
 
 //|     extended: bool
@@ -137,12 +125,9 @@ STATIC mp_obj_t canio_message_extended_set(const mp_obj_t self_in, const mp_obj_
 MP_DEFINE_CONST_FUN_OBJ_2(canio_message_extended_set_obj, canio_message_extended_set);
 
 
-STATIC const mp_obj_property_t canio_message_extended_obj = {
-    .base.type = &mp_type_property,
-    .proxy = {(mp_obj_t)&canio_message_extended_get_obj,
-              (mp_obj_t)&canio_message_extended_set_obj,
-              MP_ROM_NONE},
-};
+MP_PROPERTY_GETSET(canio_message_extended_obj,
+    (mp_obj_t)&canio_message_extended_get_obj,
+    (mp_obj_t)&canio_message_extended_set_obj);
 
 STATIC const mp_rom_map_elem_t canio_message_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_id), MP_ROM_PTR(&canio_message_id_obj) },
@@ -151,9 +136,10 @@ STATIC const mp_rom_map_elem_t canio_message_locals_dict_table[] = {
 };
 STATIC MP_DEFINE_CONST_DICT(canio_message_locals_dict, canio_message_locals_dict_table);
 
-const mp_obj_type_t canio_message_type = {
-    { &mp_type_type },
-    .name = MP_QSTR_Message,
-    .make_new = canio_message_make_new,
-    .locals_dict = (mp_obj_t)&canio_message_locals_dict,
-};
+MP_DEFINE_CONST_OBJ_TYPE(
+    canio_message_type,
+    MP_QSTR_Message,
+    MP_TYPE_FLAG_HAS_SPECIAL_ACCESSORS,
+    make_new, canio_message_make_new,
+    locals_dict, &canio_message_locals_dict
+    );

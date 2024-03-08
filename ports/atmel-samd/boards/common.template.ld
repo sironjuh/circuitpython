@@ -28,6 +28,13 @@ SECTIONS
         _sfixed = .;
         KEEP(*(.vectors)) /* isr vector table */
 
+        __property_getter_start = .;
+        *(.property_getter)
+        __property_getter_end = .;
+        __property_getset_start = .;
+        *(.property_getset)
+        __property_getset_end = .;
+
         /* Sort text sections so that they have fewer *fill* bytes needed. */
         *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.text)))           /* .text sections (code) */
         *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.text*)))          /* .text* sections (code) */
@@ -60,7 +67,7 @@ SECTIONS
     The program executes knowing that the data is in the RAM
     but the loader puts the initial values in the FLASH_FIRMWARE (inidata).
     It is one task of the startup to copy the initial values from FLASH_FIRMWARE to RAM. */
-    .data : AT ( _sidata )
+    .data :
     {
         . = ALIGN(4);
         _srelocate = .;        /* create a global symbol at data start; used by startup code in order to initialize the .data section in RAM */
@@ -71,7 +78,7 @@ SECTIONS
 
         . = ALIGN(4);
         _erelocate = .;        /* define a global symbol at data end; used by startup code in order to initialize the .data section in RAM */
-    } >RAM
+    } >RAM AT> FLASH_FIRMWARE
 
     /* Uninitialized data section */
     .bss (NOLOAD) :
@@ -86,14 +93,6 @@ SECTIONS
         . = ALIGN(4);
         _ezero = .;         /* define a global symbol at bss end; used by startup code */
         _ebss = .;
-    } >RAM
-
-    /* this just checks there is enough RAM for the requested stack. */
-    .stack :
-    {
-        . = ALIGN(4);
-        . = . + ${CIRCUITPY_DEFAULT_STACK_SIZE};
-        . = ALIGN(4);
     } >RAM
 
     .ARM.attributes 0 : { *(.ARM.attributes) }

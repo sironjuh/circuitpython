@@ -41,10 +41,9 @@
 //| chips in the same circuit. It doesn't include audio interconnect protocols
 //| such as S/PDIF.
 //|
-//| All libraries change hardware state and should be deinitialized when they
+//| All classes change hardware state and should be deinitialized when they
 //| are no longer needed. To do so, either call :py:meth:`!deinit` or use a
 //| context manager."""
-//|
 
 STATIC const mp_rom_map_elem_t audiobusio_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_audiobusio) },
@@ -59,4 +58,4 @@ const mp_obj_module_t audiobusio_module = {
     .globals = (mp_obj_dict_t *)&audiobusio_module_globals,
 };
 
-MP_REGISTER_MODULE(MP_QSTR_audiobusio, audiobusio_module, CIRCUITPY_AUDIOBUSIO);
+MP_REGISTER_MODULE(MP_QSTR_audiobusio, audiobusio_module);

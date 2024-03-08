@@ -31,8 +31,8 @@
 #include "py/runtime.h"
 #include "py/binary.h"
 #include "py/mphal.h"
+#include "shared-bindings/microcontroller/Pin.h"
 #include "shared-bindings/touchio/TouchIn.h"
-#include "supervisor/shared/translate.h"
 
 // Native touchio only exists for SAMD21
 #ifdef SAMD21
@@ -60,7 +60,7 @@ static uint16_t get_raw_reading(touchio_touchin_obj_t *self) {
 void common_hal_touchio_touchin_construct(touchio_touchin_obj_t *self,
     const mcu_pin_obj_t *pin) {
     if (!pin->has_touch) {
-        mp_raise_ValueError(translate("Invalid pin"));
+        raise_ValueError_invalid_pin();
     }
     claim_pin(pin);
 
@@ -69,7 +69,7 @@ void common_hal_touchio_touchin_construct(touchio_touchin_obj_t *self,
         // We run the PTC at 8mhz so divide the 48mhz clock by 6.
         uint8_t gclk = find_free_gclk(6);
         if (gclk > GCLK_GEN_NUM) {
-            mp_raise_RuntimeError(translate("No free GCLKs"));
+            mp_raise_RuntimeError(MP_ERROR_TEXT("No free GCLKs"));
         }
         enable_clock_generator(gclk, CLOCK_48MHZ, 6);
 

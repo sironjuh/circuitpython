@@ -28,7 +28,7 @@
 
 #include "mpconfigboard.h"
 #include "shared-bindings/busio/SPI.h"
-#include "shared-bindings/displayio/FourWire.h"
+#include "shared-bindings/fourwire/FourWire.h"
 #include "shared-bindings/microcontroller/Pin.h"
 #include "shared-module/displayio/__init__.h"
 #include "supervisor/shared/board.h"
@@ -109,24 +109,18 @@ const uint8_t display_stop_sequence[] = {
     0x02, 0x00  // Power off
 };
 
+const uint8_t refresh_sequence[] = {
+    0x12, 0x00
+};
+
 void board_init(void) {
-    // USB
-    common_hal_never_reset_pin(&pin_GPIO19);
-    common_hal_never_reset_pin(&pin_GPIO20);
-
-    // Debug UART
-    #ifdef DEBUG
-    common_hal_never_reset_pin(&pin_GPIO43);
-    common_hal_never_reset_pin(&pin_GPIO44);
-    #endif /* DEBUG */
-
-    busio_spi_obj_t *spi = &displays[0].fourwire_bus.inline_bus;
-    common_hal_busio_spi_construct(spi, &pin_GPIO36, &pin_GPIO35, NULL);
+    fourwire_fourwire_obj_t *bus = &allocate_display_bus()->fourwire_bus;
+    busio_spi_obj_t *spi = &bus->inline_bus;
+    common_hal_busio_spi_construct(spi, &pin_GPIO36, &pin_GPIO35, NULL, false);
     common_hal_busio_spi_never_reset(spi);
 
-    displayio_fourwire_obj_t *bus = &displays[0].fourwire_bus;
-    bus->base.type = &displayio_fourwire_type;
-    common_hal_displayio_fourwire_construct(bus,
+    bus->base.type = &fourwire_fourwire_type;
+    common_hal_fourwire_fourwire_construct(bus,
         spi,
         &pin_GPIO7, // EPD_DC Command or data
         &pin_GPIO8, // EPD_CS Chip select
@@ -135,12 +129,13 @@ void board_init(void) {
         0, // Polarity
         0); // Phase
 
-    displayio_epaperdisplay_obj_t *display = &displays[0].epaper_display;
-    display->base.type = &displayio_epaperdisplay_type;
-    common_hal_displayio_epaperdisplay_construct(
+    epaperdisplay_epaperdisplay_obj_t *display = &allocate_display()->epaper_display;
+    display->base.type = &epaperdisplay_epaperdisplay_type;
+    common_hal_epaperdisplay_epaperdisplay_construct(
         display,
         bus,
         display_start_sequence, sizeof(display_start_sequence),
+        0, // start up time
         display_stop_sequence, sizeof(display_stop_sequence),
         296,  // width
         128,  // height
@@ -158,28 +153,46 @@ void board_init(void) {
         0x13,  // write_color_ram_command
         false,  // color_bits_inverted
         0x000000,  // highlight_color
-        0x12,  // refresh_display_command
+        refresh_sequence, sizeof(refresh_sequence),
         1.0,  // refresh_time
         &pin_GPIO5,  // busy_pin
         false,  // busy_state
         5.0, // seconds_per_frame
         false,  // always_toggle_chip_select
-        true);  // grayscale
+        true, // grayscale
+        false, // acep
+        false,  // two_byte_sequence_length
+        false); // address_little_endian
 }
 
-bool board_requests_safe_mode(void) {
+bool espressif_board_reset_pin_number(gpio_num_t pin_number) {
+    // Pin 16 is speaker enable and it's pulled down on the board. We don't want
+    // to pull it high because then we'll compete with the external pull down.
+    // So, reset without any pulls internally.
+    if (pin_number == 16) {
+        gpio_config_t cfg = {
+            .pin_bit_mask = BIT64(16),
+            .mode = GPIO_MODE_DISABLE,
+            // The pin is externally pulled down, so we don't need to pull it.
+            .pull_up_en = false,
+            .pull_down_en = false,
+            .intr_type = GPIO_INTR_DISABLE,
+        };
+        gpio_config(&cfg);
+        return true;
+    }
+    // Pin 4 is used for voltage monitoring, so don't reset
+    if (pin_number == 4) {
+        return true;
+    }
     return false;
 }
 
-void reset_board(void) {
-
-}
-
 void board_deinit(void) {
-    displayio_epaperdisplay_obj_t *display = &displays[0].epaper_display;
-    if (display->base.type == &displayio_epaperdisplay_type) {
+    epaperdisplay_epaperdisplay_obj_t *display = &displays[0].epaper_display;
+    if (display->base.type == &epaperdisplay_epaperdisplay_type) {
         size_t i = 0;
-        while (common_hal_displayio_epaperdisplay_get_busy(display)) {
+        while (common_hal_epaperdisplay_epaperdisplay_get_busy(display)) {
             RUN_BACKGROUND_TASKS;
             i++;
         }
@@ -189,3 +202,5 @@ void board_deinit(void) {
     }
     common_hal_displayio_release_displays();
 }
+
+// Use the MP_WEAK supervisor/shared/board.c versions of routines not defined here.

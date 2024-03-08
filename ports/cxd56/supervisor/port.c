@@ -43,8 +43,6 @@
 
 #include "common-hal/microcontroller/Pin.h"
 #include "common-hal/analogio/AnalogIn.h"
-#include "common-hal/pulseio/PulseOut.h"
-#include "common-hal/pwmio/PWMOut.h"
 #include "common-hal/busio/UART.h"
 
 #define SPRESENSE_MEM_ALIGN (32)
@@ -66,10 +64,10 @@ safe_mode_t port_init(void) {
     heap_size = size / sizeof(uint32_t);
 
     if (board_requests_safe_mode()) {
-        return USER_SAFE_MODE;
+        return SAFE_MODE_USER;
     }
 
-    return NO_SAFE_MODE;
+    return SAFE_MODE_NONE;
 }
 
 void reset_cpu(void) {
@@ -81,12 +79,6 @@ void reset_cpu(void) {
 void reset_port(void) {
     #if CIRCUITPY_ANALOGIO
     analogin_reset();
-    #endif
-    #if CIRCUITPY_PULSEIO
-    pulseout_reset();
-    #endif
-    #if CIRCUITPY_PWMIO
-    pwmout_reset();
     #endif
     #if CIRCUITPY_BUSIO
     busio_uart_reset();
@@ -104,20 +96,16 @@ void reset_to_bootloader(void) {
     }
 }
 
-bool port_has_fixed_stack(void) {
-    return true;
-}
-
 uint32_t *port_stack_get_limit(void) {
     struct tcb_s *rtcb = this_task();
 
-    return rtcb->adj_stack_ptr - (uint32_t)rtcb->adj_stack_size;
+    return rtcb->stack_base_ptr;
 }
 
 uint32_t *port_stack_get_top(void) {
     struct tcb_s *rtcb = this_task();
 
-    return rtcb->adj_stack_ptr;
+    return rtcb->stack_base_ptr + (uint32_t)rtcb->adj_stack_size;
 }
 
 uint32_t *port_heap_get_bottom(void) {

@@ -257,6 +257,11 @@
 #define GET_FATTIME()   get_fattime()
 #endif
 
+#if FF_FS_MAKE_VOLID == 1
+#define MAKE_VOLID(x) (make_volid())
+#else
+#define MAKE_VOLID(x) (GET_FATTIME())
+#endif
 
 /* File lock controls */
 #if FF_FS_LOCK != 0
@@ -273,6 +278,12 @@ typedef struct {
 
 
 /* SBCS up-case tables (\x80-\xFF) */
+// Optimize the 437-only case with a truncated lookup table.
+#if FF_CODE_PAGE == 437
+#define TBL_CT437  {0x80,0x9A,0x45,0x41,0x8E,0x41,0x8F,0x80,0x45,0x45,0x45,0x49,0x49,0x49,0x8E,0x8F, \
+                    0x90,0x92,0x92,0x4F,0x99,0x4F,0x55,0x55,0x59,0x99,0x9A,0x9B,0x9C,0x9D,0x9E,0x9F, \
+                    0x41,0x49,0x4F,0x55,0xA5}
+#else
 #define TBL_CT437  {0x80,0x9A,0x45,0x41,0x8E,0x41,0x8F,0x80,0x45,0x45,0x45,0x49,0x49,0x49,0x8E,0x8F, \
                     0x90,0x92,0x92,0x4F,0x99,0x4F,0x55,0x55,0x59,0x99,0x9A,0x9B,0x9C,0x9D,0x9E,0x9F, \
                     0x41,0x49,0x4F,0x55,0xA5,0xA5,0xA6,0xA7,0xA8,0xA9,0xAA,0xAB,0xAC,0xAD,0xAE,0xAF, \
@@ -281,6 +292,7 @@ typedef struct {
                     0xD0,0xD1,0xD2,0xD3,0xD4,0xD5,0xD6,0xD7,0xD8,0xD9,0xDA,0xDB,0xDC,0xDD,0xDE,0xDF, \
                     0xE0,0xE1,0xE2,0xE3,0xE4,0xE5,0xE6,0xE7,0xE8,0xE9,0xEA,0xEB,0xEC,0xED,0xEE,0xEF, \
                     0xF0,0xF1,0xF2,0xF3,0xF4,0xF5,0xF6,0xF7,0xF8,0xF9,0xFA,0xFB,0xFC,0xFD,0xFE,0xFF}
+#endif
 #define TBL_CT720  {0x80,0x81,0x82,0x83,0x84,0x85,0x86,0x87,0x88,0x89,0x8A,0x8B,0x8C,0x8D,0x8E,0x8F, \
                     0x90,0x91,0x92,0x93,0x94,0x95,0x96,0x97,0x98,0x99,0x9A,0x9B,0x9C,0x9D,0x9E,0x9F, \
                     0xA0,0xA1,0xA2,0xA3,0xA4,0xA5,0xA6,0xA7,0xA8,0xA9,0xAA,0xAB,0xAC,0xAD,0xAE,0xAF, \
@@ -2822,7 +2834,7 @@ static FRESULT create_name (    /* FR_OK: successful, FR_INVALID_NAME: could not
         if (di >= FF_MAX_LFN) return FR_INVALID_NAME;   /* Reject too long name */
         lfn[di++] = wc;                 /* Store the Unicode character */
     }
-    while (*p == '/' || *p == '\\') p++;    /* Skip duplicated separators if exist */
+    if (wc == '/' || wc == '\\') while (*p == '/' || *p == '\\') p++;    /* Skip duplicated separators if exist */
     *path = p;                          /* Return pointer to the next segment */
     cf = (wc < ' ') ? NS_LAST : 0;      /* Set last segment flag if end of the path */
 
@@ -2882,7 +2894,12 @@ static FRESULT create_name (    /* FR_OK: successful, FR_INVALID_NAME: could not
             }
 #elif FF_CODE_PAGE < 900    /* SBCS cfg */
             wc = ff_uni2oem(wc, CODEPAGE);          /* Unicode ==> ANSI/OEM code */
+            // Optimize the 437-only case with a truncated lookup table.
+#if FF_CODE_PAGE == 437
+            if (wc & 0x80 && wc < (0xA5 - 0x80)) wc = ExCvt[wc & 0x7F];   /* Convert extended character to upper (SBCS) */
+#else
             if (wc & 0x80) wc = ExCvt[wc & 0x7F];   /* Convert extended character to upper (SBCS) */
+#endif
 #else                       /* DBCS cfg */
             wc = ff_uni2oem(ff_wtoupper(wc), CODEPAGE); /* Unicode ==> Upper convert ==> ANSI/OEM code */
 #endif
@@ -4816,6 +4833,21 @@ FRESULT f_rename (
     DEF_NAMBUF
 
 
+    // Check to see if we're moving a directory into itself. This occurs when we're moving a
+    // directory where the old path is a prefix of the new and the next character is a "/" and thus
+    // preserves the original directory name.
+    FILINFO fno;
+    res = f_stat(fs, path_old, &fno);
+    if (res != FR_OK) {
+        return res;
+    }
+    if ((fno.fattrib & AM_DIR) != 0 &&
+        strlen(path_new) > strlen(path_old) &&
+        path_new[strlen(path_old)] == '/' &&
+        strncmp(path_old, path_new, strlen(path_old)) == 0) {
+        return FR_INVALID_NAME;
+    }
+
     res = find_volume(fs, FA_WRITE);    /* Get logical drive of the old object */
     if (res == FR_OK) {
         djo.obj.fs = fs;
@@ -5390,7 +5422,8 @@ FRESULT f_mkfs (
 )
 {
     const UINT n_fats = 1;      /* Number of FATs for FAT/FAT32 volume (1 or 2) */
-    const UINT n_rootdir = 512; /* Number of root directory entries for FAT volume */
+    // CIRCUITPY-CHANGE: Make number of root directory entries changeable. See below.
+    UINT n_rootdir = 512;       /* Default number of root directory entries for FAT volume */
     static const WORD cst[] = {1, 4, 16, 64, 256, 512, 0};  /* Cluster size boundary for FAT volume (4Ks unit) */
 #if FF_MKFS_FAT32
     static const WORD cst32[] = {1, 2, 4, 8, 16, 32, 0};    /* Cluster size boundary for FAT32 volume (128Ks unit) */
@@ -5406,6 +5439,7 @@ FRESULT f_mkfs (
     DWORD tbl[3];
 #endif
 
+    DWORD volid = MAKE_VOLID();
 
     /* Check mounted drive and clear work area */
     fs->fs_type = 0;    /* Clear mounted volume */
@@ -5607,7 +5641,7 @@ FRESULT f_mkfs (
             st_dword(buf + BPB_DataOfsEx, b_data - b_vol);          /* Data offset [sector] */
             st_dword(buf + BPB_NumClusEx, n_clst);                  /* Number of clusters */
             st_dword(buf + BPB_RootClusEx, 2 + tbl[0] + tbl[1]);    /* Root dir cluster # */
-            st_dword(buf + BPB_VolIDEx, GET_FATTIME());             /* VSN */
+            st_dword(buf + BPB_VolIDEx, volid);             /* VSN */
             st_word(buf + BPB_FSVerEx, 0x100);                      /* Filesystem version (1.00) */
             for (buf[BPB_BytsPerSecEx] = 0, i = ss; i >>= 1; buf[BPB_BytsPerSecEx]++) ; /* Log2 of sector size [byte] */
             for (buf[BPB_SecPerClusEx] = 0, i = au; i >>= 1; buf[BPB_SecPerClusEx]++) ; /* Log2 of cluster size [sector] */
@@ -5670,6 +5704,11 @@ FRESULT f_mkfs (
                 }
                 sz_fat = (n + ss - 1) / ss;     /* FAT size [sector] */
                 sz_rsv = 1;                     /* Number of reserved sectors */
+               // CIRCUITPY-CHANGE: For fewer than 256 clusters (128kB filesystem),
+               // shrink the root directory size from 512 entries to 128 entries. Note that
+               // long filenames will use two entries. This change affects only the root directory,
+               // not subdirectories
+                n_rootdir = (sz_vol <= 256) ? 128 : n_rootdir;
                 sz_dir = (DWORD)n_rootdir * SZDIRE / ss;    /* Rootdir size [sector] */
             }
             b_fat = b_vol + sz_rsv;                     /* FAT base */
@@ -5743,7 +5782,7 @@ FRESULT f_mkfs (
         st_dword(buf + BPB_HiddSec, b_vol);             /* Volume offset in the physical drive [sector] */
 #if FF_MKFS_FAT32
         if (fmt == FS_FAT32) {
-            st_dword(buf + BS_VolID32, GET_FATTIME());  /* VSN */
+            st_dword(buf + BS_VolID32, volid);  /* VSN */
             st_dword(buf + BPB_FATSz32, sz_fat);        /* FAT size [sector] */
             st_dword(buf + BPB_RootClus32, 2);          /* Root directory cluster # (2) */
             st_word(buf + BPB_FSInfo32, 1);             /* Offset of FSINFO sector (VBR + 1) */
@@ -5754,7 +5793,7 @@ FRESULT f_mkfs (
         } else
 #endif
         {
-            st_dword(buf + BS_VolID, GET_FATTIME());    /* VSN */
+            st_dword(buf + BS_VolID, volid);    /* VSN */
             st_word(buf + BPB_FATSz16, (WORD)sz_fat);   /* FAT size [sector] */
             buf[BS_DrvNum] = 0x80;                      /* Drive number (for int13) */
             buf[BS_BootSig] = 0x29;                     /* Extended boot signature */

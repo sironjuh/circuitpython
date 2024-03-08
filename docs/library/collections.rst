@@ -1,12 +1,12 @@
 :mod:`collections` -- collection and container types
-=====================================================
+====================================================
 
-.. include:: ../templates/unsupported_in_circuitpython.inc
+**Limitations:** Not implemented on the smallest CircuitPython boards for space reasons.
 
 .. module:: collections
    :synopsis: collection and container types
 
-|see_cpython_module| :mod:`cpython:collections`.
+|see_cpython_module| :mod:`python:collections`.
 
 This module implements advanced collection and container types to
 hold/accumulate various objects.
@@ -14,7 +14,7 @@ hold/accumulate various objects.
 Classes
 -------
 
-.. function:: deque(iterable, maxlen[, flags])
+.. class:: deque(iterable, maxlen[, flags])
 
     Deques (double-ended queues) are a list-like container that support O(1)
     appends and pops from either side of the deque.  New deques are created
@@ -28,7 +28,7 @@ Classes
 
         - The optional *flags* can be 1 to check for overflow when adding items.
 
-    As well as supporting `bool` and `len`, deque objects have the following
+    As well as supporting ``bool`` and ``len``, deque objects have the following
     methods:
 
     .. method:: deque.append(x)
@@ -59,7 +59,7 @@ Classes
         print(t1.name)
         assert t2.name == t2[1]
 
-.. function:: OrderedDict(...)
+.. class:: OrderedDict(...)
 
     ``dict`` type subclass which remembers and preserves the order of keys
     added. When ordered dict is iterated over, keys/items are returned in

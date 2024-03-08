@@ -29,6 +29,7 @@
 #include "shared-bindings/audiocore/RawSample.h"
 #include "shared-bindings/audiocore/WaveFile.h"
 #include "shared-bindings/microcontroller/__init__.h"
+#include "bindings/rp2pio/StateMachine.h"
 #include "supervisor/background_callback.h"
 
 #include "py/mpstate.h"
@@ -36,7 +37,7 @@
 
 #include "src/rp2_common/hardware_irq/include/hardware/irq.h"
 
-#if CIRCUITPY_AUDIOPWMIO || CIRCUITPY_AUDIOBUSIO
+#if CIRCUITPY_AUDIOCORE
 
 void audio_dma_reset(void) {
     for (size_t channel = 0; channel < NUM_DMA_CHANNELS; channel++) {
@@ -56,27 +57,33 @@ STATIC size_t audio_dma_convert_samples(audio_dma_t *dma, uint8_t *input, uint32
     uint32_t output_length_used = input_length / dma->sample_spacing;
 
     if (output_length_used > output_length) {
-        mp_raise_RuntimeError(translate("Internal audio buffer too small"));
+        mp_raise_RuntimeError(MP_ERROR_TEXT("Internal audio buffer too small"));
     }
 
     uint32_t out_i = 0;
     if (dma->sample_resolution <= 8 && dma->output_resolution > 8) {
         // reading bytes, writing 16-bit words, so output buffer will be bigger.
 
-        output_length_used = output_length * 2;
+        output_length_used *= 2;
         if (output_length_used > output_length) {
-            mp_raise_RuntimeError(translate("Internal audio buffer too small"));
+            mp_raise_RuntimeError(MP_ERROR_TEXT("Internal audio buffer too small"));
         }
 
-        size_t shift = dma->output_resolution - dma->sample_resolution;
+        // Correct "rail-to-rail" scaling of arbitrary-depth input to output
+        // requires more operations than this, but at least the vital 8- to
+        // 16-bit cases are correctly scaled now. Prior code was only
+        // considering 8-to-16 anyway, but had a slight DC offset in the
+        // result, so this is no worse off WRT supported resolutions.
+        uint16_t mul = ((1 << dma->output_resolution) - 1) / ((1 << dma->sample_resolution) - 1);
+        uint16_t offset = (1 << dma->output_resolution) / 2;
 
         for (uint32_t i = 0; i < input_length; i += dma->sample_spacing) {
             if (dma->signed_to_unsigned) {
-                ((uint16_t *)output)[out_i] = ((uint16_t)((int8_t *)input)[i] + 0x80) << shift;
+                ((uint16_t *)output)[out_i] = (uint16_t)((((int8_t *)input)[i] + 0x80) * mul);
             } else if (dma->unsigned_to_signed) {
-                ((int16_t *)output)[out_i] = ((int16_t)((uint8_t *)input)[i] - 0x80) << shift;
+                ((int16_t *)output)[out_i] = (int16_t)(((uint8_t *)input)[i] * mul - offset);
             } else {
-                ((uint16_t *)output)[out_i] = ((uint16_t)((uint8_t *)input)[i]) << shift;
+                ((uint16_t *)output)[out_i] = (uint16_t)(((uint8_t *)input)[i] * mul);
             }
             out_i += 1;
         }
@@ -113,7 +120,15 @@ STATIC size_t audio_dma_convert_samples(audio_dma_t *dma, uint8_t *input, uint32
     } else {
         // (dma->sample_resolution > 8 && dma->output_resolution <= 8)
         // Not currently used, but might be in the future.
-        mp_raise_RuntimeError(translate("Audio conversion not implemented"));
+        mp_raise_RuntimeError(MP_ERROR_TEXT("Audio conversion not implemented"));
+    }
+    if (dma->swap_channel) {
+        // Loop for swapping left and right channels
+        for (uint32_t i = 0; i < out_i; i += 2) {
+            uint16_t temp = ((uint16_t *)output)[i];
+            ((uint16_t *)output)[i] = ((uint16_t *)output)[i + 1];
+            ((uint16_t *)output)[i + 1] = temp;
+        }
     }
     #pragma GCC diagnostic pop
     return output_length_used;
@@ -176,7 +191,8 @@ audio_dma_result audio_dma_setup_playback(
     bool output_signed,
     uint8_t output_resolution,
     uint32_t output_register_address,
-    uint8_t dma_trigger_source) {
+    uint8_t dma_trigger_source,
+    bool swap_channel) {
 
     // Use two DMA channels to play because the DMA can't wrap to itself without the
     // buffer being power of two aligned.
@@ -205,6 +221,7 @@ audio_dma_result audio_dma_setup_playback(
     dma->output_resolution = output_resolution;
     dma->sample_resolution = audiosample_bits_per_sample(sample);
     dma->output_register_address = output_register_address;
+    dma->swap_channel = swap_channel;
 
     audiosample_reset_buffer(sample, single_channel_output, audio_channel);
 
@@ -324,7 +341,9 @@ void audio_dma_stop(audio_dma_t *dma) {
         channel_mask |= 1 << dma->channel[1];
     }
     dma_hw->inte0 &= ~channel_mask;
-    irq_set_mask_enabled(1 << DMA_IRQ_0, false);
+    if (!dma_hw->inte0) {
+        irq_set_mask_enabled(1 << DMA_IRQ_0, false);
+    }
 
     // Run any remaining audio tasks because we remove ourselves from
     // playing_audio.
@@ -385,6 +404,27 @@ bool audio_dma_get_paused(audio_dma_t *dma) {
     return (control & DMA_CH0_CTRL_TRIG_EN_BITS) == 0;
 }
 
+uint32_t audio_dma_pause_all(void) {
+    uint32_t result = 0;
+    for (size_t channel = 0; channel < NUM_DMA_CHANNELS; channel++) {
+        audio_dma_t *dma = MP_STATE_PORT(playing_audio)[channel];
+        if (dma != NULL && !audio_dma_get_paused(dma)) {
+            audio_dma_pause(dma);
+            result |= (1 << channel);
+        }
+    }
+    return result;
+}
+
+void audio_dma_unpause_mask(uint32_t channel_mask) {
+    for (size_t channel = 0; channel < NUM_DMA_CHANNELS; channel++) {
+        audio_dma_t *dma = MP_STATE_PORT(playing_audio)[channel];
+        if (dma != NULL && (channel_mask & (1 << channel))) {
+            audio_dma_resume(dma);
+        }
+    }
+}
+
 void audio_dma_init(audio_dma_t *dma) {
     dma->buffer[0] = NULL;
     dma->buffer[1] = NULL;
@@ -442,14 +482,26 @@ STATIC void dma_callback_fun(void *arg) {
 void isr_dma_0(void) {
     for (size_t i = 0; i < NUM_DMA_CHANNELS; i++) {
         uint32_t mask = 1 << i;
-        if ((dma_hw->intr & mask) != 0 && MP_STATE_PORT(playing_audio)[i] != NULL) {
+        if ((dma_hw->intr & mask) == 0) {
+            continue;
+        }
+        // acknowledge interrupt early. Doing so late means that you could lose an
+        // interrupt if the buffer is very small and the DMA operation
+        // completed by the time callback_add() / dma_complete() returned. This
+        // affected PIO continuous write more than audio.
+        dma_hw->ints0 = mask;
+        if (MP_STATE_PORT(playing_audio)[i] != NULL) {
             audio_dma_t *dma = MP_STATE_PORT(playing_audio)[i];
             // Record all channels whose DMA has completed; they need loading.
             dma->channels_to_load_mask |= mask;
             background_callback_add(&dma->callback, dma_callback_fun, (void *)dma);
-            dma_hw->ints0 = mask;
+        }
+        if (MP_STATE_PORT(background_pio)[i] != NULL) {
+            rp2pio_statemachine_obj_t *pio = MP_STATE_PORT(background_pio)[i];
+            rp2pio_statemachine_dma_complete(pio, i);
         }
     }
 }
 
+MP_REGISTER_ROOT_POINTER(mp_obj_t playing_audio[enum_NUM_DMA_CHANNELS]);
 #endif

@@ -36,6 +36,10 @@
 #include "shared-bindings/analogio/AnalogIn.h"
 #include "shared-bindings/util.h"
 
+MP_WEAK const mcu_pin_obj_t *common_hal_analogio_analogin_validate_pin(mp_obj_t obj) {
+    return validate_obj_is_free_pin(obj, MP_QSTR_pin);
+}
+
 //| class AnalogIn:
 //|     """Read analog voltage levels
 //|
@@ -54,17 +58,14 @@
 //|
 //|         :param ~microcontroller.Pin pin: the pin to read from"""
 //|         ...
-//|
 STATIC mp_obj_t analogio_analogin_make_new(const mp_obj_type_t *type,
     mp_uint_t n_args, size_t n_kw, const mp_obj_t *args) {
     // check number of arguments
     mp_arg_check_num(n_args, n_kw, 1, 1, false);
 
     // 1st argument is the pin
-    const mcu_pin_obj_t *pin = validate_obj_is_free_pin(args[0]);
-
-    analogio_analogin_obj_t *self = m_new_obj(analogio_analogin_obj_t);
-    self->base.type = &analogio_analogin_type;
+    const mcu_pin_obj_t *pin = common_hal_analogio_analogin_validate_pin(args[0]);
+    analogio_analogin_obj_t *self = mp_obj_malloc(analogio_analogin_obj_t, &analogio_analogin_type);
     common_hal_analogio_analogin_construct(self, pin);
 
     return MP_OBJ_FROM_PTR(self);
@@ -73,7 +74,6 @@ STATIC mp_obj_t analogio_analogin_make_new(const mp_obj_type_t *type,
 //|     def deinit(self) -> None:
 //|         """Turn off the AnalogIn and release the pin for other use."""
 //|         ...
-//|
 STATIC mp_obj_t analogio_analogin_deinit(mp_obj_t self_in) {
     analogio_analogin_obj_t *self = MP_OBJ_TO_PTR(self_in);
     common_hal_analogio_analogin_deinit(self);
@@ -89,14 +89,12 @@ STATIC void check_for_deinit(analogio_analogin_obj_t *self) {
 //|     def __enter__(self) -> AnalogIn:
 //|         """No-op used by Context Managers."""
 //|         ...
-//|
 //  Provided by context manager helper.
 
 //|     def __exit__(self) -> None:
 //|         """Automatically deinitializes the hardware when exiting a context. See
 //|         :ref:`lifetime-and-contextmanagers` for more info."""
 //|         ...
-//|
 STATIC mp_obj_t analogio_analogin___exit__(size_t n_args, const mp_obj_t *args) {
     (void)n_args;
     common_hal_analogio_analogin_deinit(args[0]);
@@ -109,7 +107,6 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(analogio_analogin___exit___obj, 4, 4,
 //|
 //|     Even if the underlying analog to digital converter (ADC) is lower
 //|     resolution, the value is 16-bit."""
-//|
 STATIC mp_obj_t analogio_analogin_obj_get_value(mp_obj_t self_in) {
     analogio_analogin_obj_t *self = MP_OBJ_TO_PTR(self_in);
     check_for_deinit(self);
@@ -117,16 +114,13 @@ STATIC mp_obj_t analogio_analogin_obj_get_value(mp_obj_t self_in) {
 }
 MP_DEFINE_CONST_FUN_OBJ_1(analogio_analogin_get_value_obj, analogio_analogin_obj_get_value);
 
-const mp_obj_property_t analogio_analogin_value_obj = {
-    .base.type = &mp_type_property,
-    .proxy = {(mp_obj_t)&analogio_analogin_get_value_obj,
-              MP_ROM_NONE,
-              MP_ROM_NONE},
-};
+MP_PROPERTY_GETTER(analogio_analogin_value_obj,
+    (mp_obj_t)&analogio_analogin_get_value_obj);
 
 //|     reference_voltage: float
 //|     """The maximum voltage measurable (also known as the reference voltage) as a
-//|     `float` in Volts."""
+//|     ``float`` in Volts.  Note the ADC value may not scale to the actual voltage linearly
+//|     at ends of the analog range."""
 //|
 STATIC mp_obj_t analogio_analogin_obj_get_reference_voltage(mp_obj_t self_in) {
     analogio_analogin_obj_t *self = MP_OBJ_TO_PTR(self_in);
@@ -142,12 +136,8 @@ STATIC mp_obj_t analogio_analogin_obj_get_reference_voltage(mp_obj_t self_in) {
 MP_DEFINE_CONST_FUN_OBJ_1(analogio_analogin_get_reference_voltage_obj,
     analogio_analogin_obj_get_reference_voltage);
 
-const mp_obj_property_t analogio_analogin_reference_voltage_obj = {
-    .base.type = &mp_type_property,
-    .proxy = {(mp_obj_t)&analogio_analogin_get_reference_voltage_obj,
-              MP_ROM_NONE,
-              MP_ROM_NONE},
-};
+MP_PROPERTY_GETTER(analogio_analogin_reference_voltage_obj,
+    (mp_obj_t)&analogio_analogin_get_reference_voltage_obj);
 
 STATIC const mp_rom_map_elem_t analogio_analogin_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_deinit),             MP_ROM_PTR(&analogio_analogin_deinit_obj) },
@@ -159,9 +149,10 @@ STATIC const mp_rom_map_elem_t analogio_analogin_locals_dict_table[] = {
 
 STATIC MP_DEFINE_CONST_DICT(analogio_analogin_locals_dict, analogio_analogin_locals_dict_table);
 
-const mp_obj_type_t analogio_analogin_type = {
-    { &mp_type_type },
-    .name = MP_QSTR_AnalogIn,
-    .make_new = analogio_analogin_make_new,
-    .locals_dict = (mp_obj_t)&analogio_analogin_locals_dict,
-};
+MP_DEFINE_CONST_OBJ_TYPE(
+    analogio_analogin_type,
+    MP_QSTR_AnalogIn,
+    MP_TYPE_FLAG_HAS_SPECIAL_ACCESSORS,
+    make_new, analogio_analogin_make_new,
+    locals_dict, &analogio_analogin_locals_dict
+    );

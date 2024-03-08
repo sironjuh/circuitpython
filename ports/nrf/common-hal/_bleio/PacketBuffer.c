@@ -43,7 +43,7 @@
 #include "supervisor/shared/bluetooth/serial.h"
 
 STATIC void write_to_ringbuf(bleio_packet_buffer_obj_t *self, uint8_t *data, uint16_t len) {
-    if (len + sizeof(uint16_t) > ringbuf_capacity(&self->ringbuf)) {
+    if (len + sizeof(uint16_t) > ringbuf_size(&self->ringbuf)) {
         // This shouldn't happen but can if our buffer size was much smaller than
         // the writes the client actually makes.
         return;
@@ -52,7 +52,7 @@ STATIC void write_to_ringbuf(bleio_packet_buffer_obj_t *self, uint8_t *data, uin
     uint8_t is_nested_critical_region;
     sd_nvic_critical_region_enter(&is_nested_critical_region);
     // Make room for the new value by dropping the oldest packets first.
-    while (ringbuf_capacity(&self->ringbuf) - ringbuf_num_filled(&self->ringbuf) < len + sizeof(uint16_t)) {
+    while (ringbuf_size(&self->ringbuf) - ringbuf_num_filled(&self->ringbuf) < len + sizeof(uint16_t)) {
         uint16_t packet_length;
         ringbuf_get_n(&self->ringbuf, (uint8_t *)&packet_length, sizeof(uint16_t));
         for (uint16_t i = 0; i < packet_length; i++) {
@@ -233,10 +233,7 @@ void _common_hal_bleio_packet_buffer_construct(
     }
 
     if (incoming) {
-        self->ringbuf.buf = (uint8_t *)incoming_buffer;
-        self->ringbuf.size = incoming_buffer_size;
-        self->ringbuf.iget = 0;
-        self->ringbuf.iput = 0;
+        ringbuf_init(&self->ringbuf, (uint8_t *)incoming_buffer, incoming_buffer_size);
     }
 
     self->packet_queued = false;
@@ -301,14 +298,14 @@ void common_hal_bleio_packet_buffer_construct(
     uint32_t *incoming_buffer = NULL;
     if (incoming) {
         incoming_buffer_size = buffer_size * (sizeof(uint16_t) + max_packet_size);
-        incoming_buffer = m_malloc(incoming_buffer_size, false);
+        incoming_buffer = m_malloc(incoming_buffer_size);
     }
 
     uint32_t *outgoing1 = NULL;
     uint32_t *outgoing2 = NULL;
     if (outgoing) {
-        outgoing1 = m_malloc(max_packet_size, false);
-        outgoing2 = m_malloc(max_packet_size, false);
+        outgoing1 = m_malloc(max_packet_size);
+        outgoing2 = m_malloc(max_packet_size);
     }
     _common_hal_bleio_packet_buffer_construct(self, characteristic,
         incoming_buffer, incoming_buffer_size,
@@ -351,7 +348,7 @@ mp_int_t common_hal_bleio_packet_buffer_readinto(bleio_packet_buffer_obj_t *self
 
 mp_int_t common_hal_bleio_packet_buffer_write(bleio_packet_buffer_obj_t *self, const uint8_t *data, size_t len, uint8_t *header, size_t header_len) {
     if (self->outgoing[0] == NULL) {
-        mp_raise_bleio_BluetoothError(translate("Writes not supported on Characteristic"));
+        mp_raise_bleio_BluetoothError(MP_ERROR_TEXT("Writes not supported on Characteristic"));
     }
     if (self->conn_handle == BLE_CONN_HANDLE_INVALID) {
         return -1;
@@ -364,11 +361,11 @@ mp_int_t common_hal_bleio_packet_buffer_write(bleio_packet_buffer_obj_t *self, c
     mp_int_t total_len = len + header_len;
     if (total_len > outgoing_packet_length) {
         // Supplied data will not fit in a single BLE packet.
-        mp_raise_ValueError_varg(translate("Total data to write is larger than %q"), MP_QSTR_outgoing_packet_length);
+        mp_raise_ValueError_varg(MP_ERROR_TEXT("Total data to write is larger than %q"), MP_QSTR_outgoing_packet_length);
     }
     if (total_len > self->max_packet_size) {
         // Supplied data will not fit in a single BLE packet.
-        mp_raise_ValueError_varg(translate("Total data to write is larger than %q"), MP_QSTR_max_packet_size);
+        mp_raise_ValueError_varg(MP_ERROR_TEXT("Total data to write is larger than %q"), MP_QSTR_max_packet_size);
     }
     outgoing_packet_length = MIN(outgoing_packet_length, self->max_packet_size);
 
@@ -380,9 +377,11 @@ mp_int_t common_hal_bleio_packet_buffer_write(bleio_packet_buffer_obj_t *self, c
                !mp_hal_is_interrupted()) {
             RUN_BACKGROUND_TASKS;
         }
+        if (mp_hal_is_interrupted()) {
+            return -1;
+        }
     }
-    if (self->conn_handle == BLE_CONN_HANDLE_INVALID ||
-        mp_hal_is_interrupted()) {
+    if (self->conn_handle == BLE_CONN_HANDLE_INVALID) {
         return -1;
     }
 
@@ -500,7 +499,9 @@ bool common_hal_bleio_packet_buffer_deinited(bleio_packet_buffer_obj_t *self) {
 }
 
 void common_hal_bleio_packet_buffer_deinit(bleio_packet_buffer_obj_t *self) {
+
     if (!common_hal_bleio_packet_buffer_deinited(self)) {
         ble_drv_remove_event_handler(packet_buffer_on_ble_client_evt, self);
+        ringbuf_deinit(&self->ringbuf);
     }
 }

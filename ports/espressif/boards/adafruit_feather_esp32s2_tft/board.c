@@ -27,12 +27,13 @@
 #include "supervisor/board.h"
 #include "mpconfigboard.h"
 #include "shared-bindings/busio/SPI.h"
-#include "shared-bindings/displayio/FourWire.h"
+#include "shared-bindings/fourwire/FourWire.h"
 #include "shared-bindings/microcontroller/Pin.h"
 #include "shared-module/displayio/__init__.h"
 #include "shared-module/displayio/mipi_constants.h"
+#include "shared-bindings/board/__init__.h"
 
-displayio_fourwire_obj_t board_display_obj;
+fourwire_fourwire_obj_t board_display_obj;
 
 #define DELAY 0x80
 
@@ -70,32 +71,11 @@ uint8_t display_init_sequence[] = {
 
 
 void board_init(void) {
-    // USB
-    common_hal_never_reset_pin(&pin_GPIO19);
-    common_hal_never_reset_pin(&pin_GPIO20);
+    busio_spi_obj_t *spi = common_hal_board_create_spi(0);
+    fourwire_fourwire_obj_t *bus = &allocate_display_bus()->fourwire_bus;
+    bus->base.type = &fourwire_fourwire_type;
 
-    // I2C/TFT power pin
-    common_hal_never_reset_pin(&pin_GPIO21);
-
-    // Turn on TFT and I2C
-    gpio_set_direction(21, GPIO_MODE_DEF_OUTPUT);
-    gpio_set_level(21, true);
-
-    busio_spi_obj_t *spi = &displays[0].fourwire_bus.inline_bus;
-
-    common_hal_busio_spi_construct(
-        spi,
-        &pin_GPIO36,    // CLK
-        &pin_GPIO35,    // MOSI
-        NULL            // MISO not connected
-        );
-
-    common_hal_busio_spi_never_reset(spi);
-
-    displayio_fourwire_obj_t *bus = &displays[0].fourwire_bus;
-    bus->base.type = &displayio_fourwire_type;
-
-    common_hal_displayio_fourwire_construct(
+    common_hal_fourwire_fourwire_construct(
         bus,
         spi,
         &pin_GPIO39,    // DC
@@ -105,14 +85,10 @@ void board_init(void) {
         0,              // polarity
         0               // phase
         );
-    displayio_display_obj_t *display = &displays[0].display;
-    display->base.type = &displayio_display_type;
+    busdisplay_busdisplay_obj_t *display = &allocate_display()->display;
+    display->base.type = &busdisplay_busdisplay_type;
 
-    // workaround as board_init() is called before reset_port() in main.c
-    pwmout_reset();
-
-
-    common_hal_displayio_display_construct(
+    common_hal_busdisplay_busdisplay_construct(
         display,
         bus,
         240,            // width (after rotation)
@@ -133,26 +109,28 @@ void board_init(void) {
         sizeof(display_init_sequence),
         &pin_GPIO45,    // backlight pin
         NO_BRIGHTNESS_COMMAND,
-        1.0f,           // brightness (ignored)
-        false,          // auto_brightness
+        1.0f,           // brightness
         false,          // single_byte_bounds
         false,          // data_as_commands
         true,           // auto_refresh
         60,             // native_frames_per_second
         true,           // backlight_on_high
-        false           // SH1107_addressing
+        false,          // SH1107_addressing
+        50000           // backlight pwm frequency
         );
-
-    common_hal_never_reset_pin(&pin_GPIO45); // backlight pin
 }
 
-bool board_requests_safe_mode(void) {
+bool espressif_board_reset_pin_number(gpio_num_t pin_number) {
+    // Override the I2C/TFT power pin reset to prevent resetting the display.
+    if (pin_number == 21) {
+        // Turn on TFT and I2C
+        gpio_set_direction(pin_number, GPIO_MODE_DEF_OUTPUT);
+        gpio_set_level(pin_number, true);
+        return true;
+    }
     return false;
 }
 
-void reset_board(void) {
+// Use the MP_WEAK supervisor/shared/board.c versions of routines not defined here.
 
-}
-
-void board_deinit(void) {
-}
+// TODO: Should we turn off the display when asleep, in board_deinit()?

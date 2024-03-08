@@ -49,7 +49,6 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_0(get_ticks_obj, get_ticks);
 
 
 //| """LED matrix driver"""
-//|
 STATIC const mp_rom_map_elem_t pew_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR__pew) },
     { MP_OBJ_NEW_QSTR(MP_QSTR_PewPew),  MP_ROM_PTR(&pewpew_type)},
@@ -64,4 +63,4 @@ const mp_obj_module_t pew_module = {
     .globals = (mp_obj_dict_t *)&pew_module_globals,
 };
 
-MP_REGISTER_MODULE(MP_QSTR__pew, pew_module, CIRCUITPY_PEW);
+MP_REGISTER_ROOT_POINTER(mp_obj_t pew_singleton);

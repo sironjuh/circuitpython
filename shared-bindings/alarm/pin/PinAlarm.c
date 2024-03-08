@@ -33,12 +33,13 @@
 #include "py/obj.h"
 #include "py/objproperty.h"
 #include "py/runtime.h"
-#include "supervisor/shared/translate.h"
 
 //| class PinAlarm:
 //|     """Trigger an alarm when a pin changes state."""
 //|
-//|     def __init__(self, pin: microcontroller.Pin, value: bool, edge: bool = False, pull: bool = False) -> None:
+//|     def __init__(
+//|         self, pin: microcontroller.Pin, value: bool, edge: bool = False, pull: bool = False
+//|     ) -> None:
 //|         """Create an alarm triggered by a `microcontroller.Pin` level. The alarm is not active
 //|         until it is passed to an `alarm`-enabling function, such as `alarm.light_sleep_until_alarms()` or
 //|         `alarm.exit_and_deep_sleep_until_alarms()`.
@@ -59,10 +60,8 @@
 //|           pulls it high.
 //|         """
 //|         ...
-//|
 STATIC mp_obj_t alarm_pin_pinalarm_make_new(const mp_obj_type_t *type, mp_uint_t n_args, size_t n_kw, const mp_obj_t *all_args) {
-    alarm_pin_pinalarm_obj_t *self = m_new_obj(alarm_pin_pinalarm_obj_t);
-    self->base.type = &alarm_pin_pinalarm_type;
+    alarm_pin_pinalarm_obj_t *self = mp_obj_malloc(alarm_pin_pinalarm_obj_t, &alarm_pin_pinalarm_type);
     enum { ARG_pin, ARG_value, ARG_edge, ARG_pull };
     static const mp_arg_t allowed_args[] = {
         { MP_QSTR_pin, MP_ARG_REQUIRED | MP_ARG_OBJ },
@@ -73,7 +72,7 @@ STATIC mp_obj_t alarm_pin_pinalarm_make_new(const mp_obj_type_t *type, mp_uint_t
     mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
     mp_arg_parse_all_kw_array(n_args, n_kw, all_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
 
-    const mcu_pin_obj_t *pin = validate_obj_is_free_pin(args[ARG_pin].u_obj);
+    const mcu_pin_obj_t *pin = validate_obj_is_free_pin(args[ARG_pin].u_obj, MP_QSTR_pin);
 
     common_hal_alarm_pin_pinalarm_construct(self,
         pin,
@@ -86,7 +85,6 @@ STATIC mp_obj_t alarm_pin_pinalarm_make_new(const mp_obj_type_t *type, mp_uint_t
 
 //|     pin: microcontroller.Pin
 //|     """The trigger pin."""
-//|
 STATIC mp_obj_t alarm_pin_pinalarm_obj_get_pin(mp_obj_t self_in) {
     alarm_pin_pinalarm_obj_t *self = MP_OBJ_TO_PTR(self_in);
     const mcu_pin_obj_t *pin = common_hal_alarm_pin_pinalarm_get_pin(self);
@@ -97,12 +95,8 @@ STATIC mp_obj_t alarm_pin_pinalarm_obj_get_pin(mp_obj_t self_in) {
 }
 MP_DEFINE_CONST_FUN_OBJ_1(alarm_pin_pinalarm_get_pin_obj, alarm_pin_pinalarm_obj_get_pin);
 
-const mp_obj_property_t alarm_pin_pinalarm_pin_obj = {
-    .base.type = &mp_type_property,
-    .proxy = {(mp_obj_t)&alarm_pin_pinalarm_get_pin_obj,
-              MP_ROM_NONE,
-              MP_ROM_NONE},
-};
+MP_PROPERTY_GETTER(alarm_pin_pinalarm_pin_obj,
+    (mp_obj_t)&alarm_pin_pinalarm_get_pin_obj);
 
 //|     value: bool
 //|     """The value on which to trigger."""
@@ -113,12 +107,8 @@ STATIC mp_obj_t alarm_pin_pinalarm_obj_get_value(mp_obj_t self_in) {
 }
 MP_DEFINE_CONST_FUN_OBJ_1(alarm_pin_pinalarm_get_value_obj, alarm_pin_pinalarm_obj_get_value);
 
-const mp_obj_property_t alarm_pin_pinalarm_value_obj = {
-    .base.type = &mp_type_property,
-    .proxy = {(mp_obj_t)&alarm_pin_pinalarm_get_value_obj,
-              MP_ROM_NONE,
-              MP_ROM_NONE},
-};
+MP_PROPERTY_GETTER(alarm_pin_pinalarm_value_obj,
+    (mp_obj_t)&alarm_pin_pinalarm_get_value_obj);
 
 STATIC const mp_rom_map_elem_t alarm_pin_pinalarm_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_pin), MP_ROM_PTR(&alarm_pin_pinalarm_pin_obj) },
@@ -127,9 +117,10 @@ STATIC const mp_rom_map_elem_t alarm_pin_pinalarm_locals_dict_table[] = {
 
 STATIC MP_DEFINE_CONST_DICT(alarm_pin_pinalarm_locals_dict, alarm_pin_pinalarm_locals_dict_table);
 
-const mp_obj_type_t alarm_pin_pinalarm_type = {
-    { &mp_type_type },
-    .name = MP_QSTR_PinAlarm,
-    .make_new = alarm_pin_pinalarm_make_new,
-    .locals_dict = (mp_obj_t)&alarm_pin_pinalarm_locals_dict,
-};
+MP_DEFINE_CONST_OBJ_TYPE(
+    alarm_pin_pinalarm_type,
+    MP_QSTR_PinAlarm,
+    MP_TYPE_FLAG_HAS_SPECIAL_ACCESSORS,
+    make_new, alarm_pin_pinalarm_make_new,
+    locals_dict, &alarm_pin_pinalarm_locals_dict
+    );

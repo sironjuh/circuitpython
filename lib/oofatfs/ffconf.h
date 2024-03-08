@@ -6,7 +6,7 @@
  *
  * The MIT License (MIT)
  *
- * SPDX-FileCopyrightText: Copyright (c) 2013-2019 Damien P. George
+ * Copyright (c) 2013-2019 Damien P. George
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -72,8 +72,8 @@
 #define FF_USE_MKFS     1
 /* This option switches f_mkfs() function. (0:Disable or 1:Enable) */
 
-#ifdef MICROPY_FF_MKFS_FAT32
-#define FF_MKFS_FAT32   MICROPY_FF_MKFS_FAT32
+#ifdef MICROPY_FATFS_MKFS_FAT32
+#define FF_MKFS_FAT32   MICROPY_FATFS_MKFS_FAT32
 #else
 #define FF_MKFS_FAT32   0
 #endif
@@ -267,6 +267,12 @@
 /  for variable sector size mode and disk_ioctl() function needs to implement
 /  GET_SECTOR_SIZE command. */
 
+#ifdef MICROPY_FATFS_WINDOW_ALIGNMENT
+#define FF_WINDOW_ALIGNMENT   (MICROPY_FATFS_WINDOW_ALIGNMENT)
+#else
+#define FF_WINDOW_ALIGNMENT   1
+#endif
+
 
 #define FF_USE_TRIM     0
 /* This option switches support for ATA-TRIM. (0:Disable or 1:Enable)
@@ -373,6 +379,10 @@
 /  SemaphoreHandle_t and etc. A header file for O/S definitions needs to be
 /  included somewhere in the scope of ff.h. */
 
-
+#ifndef FF_FS_MAKE_VOLID
+#define FF_FS_MAKE_VOLID (0)
+#endif
+/* The option FF_FS_MAKE_VOLID enables the use of a function to return a 32-bit volume identifier.
+/  If it is disabled, a Volume ID based on the current time is used. */
 
 /*--- End of configuration options ---*/

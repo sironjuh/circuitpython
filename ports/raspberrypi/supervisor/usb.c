@@ -34,16 +34,13 @@
 void init_usb_hardware(void) {
 }
 
+STATIC void _usb_irq_wrapper(void) {
+    usb_irq_handler(0);
+}
+
 void post_usb_init(void) {
-    irq_set_enabled(USBCTRL_IRQ, false);
-
-    irq_handler_t usb_handler = irq_get_exclusive_handler(USBCTRL_IRQ);
-    if (usb_handler) {
-        irq_remove_handler(USBCTRL_IRQ, usb_handler);
-    }
-    irq_set_exclusive_handler(USBCTRL_IRQ, usb_irq_handler);
-
-    irq_set_enabled(USBCTRL_IRQ, true);
+    irq_add_shared_handler(USBCTRL_IRQ, _usb_irq_wrapper,
+        PICO_SHARED_IRQ_HANDLER_LOWEST_ORDER_PRIORITY);
 
     // There is a small window where the USB interrupt may be handled by the
     // pico-sdk instead of CircuitPython. If that is the case, then we'll have

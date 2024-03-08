@@ -46,7 +46,17 @@
 //|         as part of remote Characteristics in the remote Services that are discovered."""
 //|
 //|     @classmethod
-//|     def add_to_characteristic(cls, characteristic: Characteristic, uuid: UUID, *, read_perm: int = Attribute.OPEN, write_perm: int = Attribute.OPEN, max_length: int = 20, fixed_length: bool = False, initial_value: ReadableBuffer = b'') -> Descriptor:
+//|     def add_to_characteristic(
+//|         cls,
+//|         characteristic: Characteristic,
+//|         uuid: UUID,
+//|         *,
+//|         read_perm: int = Attribute.OPEN,
+//|         write_perm: int = Attribute.OPEN,
+//|         max_length: int = 20,
+//|         fixed_length: bool = False,
+//|         initial_value: ReadableBuffer = b""
+//|     ) -> Descriptor:
 //|         """Create a new Descriptor object, and add it to this Service.
 //|
 //|         :param Characteristic characteristic: The characteristic that will hold this descriptor
@@ -65,7 +75,6 @@
 //|
 //|         :return: the new Descriptor."""
 //|         ...
-//|
 STATIC mp_obj_t bleio_descriptor_add_to_characteristic(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
     // class is arg[0], which we can ignore.
 
@@ -94,10 +103,8 @@ STATIC mp_obj_t bleio_descriptor_add_to_characteristic(size_t n_args, const mp_o
     const bleio_attribute_security_mode_t write_perm = args[ARG_write_perm].u_int;
     common_hal_bleio_attribute_security_mode_check_valid(write_perm);
 
-    const mp_int_t max_length_int = args[ARG_max_length].u_int;
-    if (max_length_int < 0) {
-        mp_raise_ValueError(translate("max_length must be >= 0"));
-    }
+    const mp_int_t max_length_int = mp_arg_validate_int_min(args[ARG_max_length].u_int, 0, MP_QSTR_max_length);
+
     const size_t max_length = (size_t)max_length_int;
     const bool fixed_length = args[ARG_fixed_length].u_bool;
     mp_obj_t initial_value = args[ARG_initial_value].u_obj;
@@ -113,11 +120,10 @@ STATIC mp_obj_t bleio_descriptor_add_to_characteristic(size_t n_args, const mp_o
     mp_get_buffer_raise(initial_value, &initial_value_bufinfo, MP_BUFFER_READ);
     if (initial_value_bufinfo.len > max_length ||
         (fixed_length && initial_value_bufinfo.len != max_length)) {
-        mp_raise_ValueError(translate("initial_value length is wrong"));
+        mp_raise_ValueError(MP_ERROR_TEXT("initial_value length is wrong"));
     }
 
-    bleio_descriptor_obj_t *descriptor = m_new_obj(bleio_descriptor_obj_t);
-    descriptor->base.type = &bleio_descriptor_type;
+    bleio_descriptor_obj_t *descriptor = mp_obj_malloc(bleio_descriptor_obj_t, &bleio_descriptor_type);
 
     // Range checking on max_length arg is done by the common_hal layer, because
     // it may vary depending on underlying BLE implementation.
@@ -135,7 +141,6 @@ STATIC MP_DEFINE_CONST_CLASSMETHOD_OBJ(bleio_descriptor_add_to_characteristic_ob
 
 //|     uuid: UUID
 //|     """The descriptor uuid. (read-only)"""
-//|
 STATIC mp_obj_t bleio_descriptor_get_uuid(mp_obj_t self_in) {
     bleio_descriptor_obj_t *self = MP_OBJ_TO_PTR(self_in);
 
@@ -144,16 +149,11 @@ STATIC mp_obj_t bleio_descriptor_get_uuid(mp_obj_t self_in) {
 }
 MP_DEFINE_CONST_FUN_OBJ_1(bleio_descriptor_get_uuid_obj, bleio_descriptor_get_uuid);
 
-const mp_obj_property_t bleio_descriptor_uuid_obj = {
-    .base.type = &mp_type_property,
-    .proxy = {(mp_obj_t)&bleio_descriptor_get_uuid_obj,
-              MP_ROM_NONE,
-              MP_ROM_NONE},
-};
+MP_PROPERTY_GETTER(bleio_descriptor_uuid_obj,
+    (mp_obj_t)&bleio_descriptor_get_uuid_obj);
 
 //|     characteristic: Characteristic
 //|     """The Characteristic this Descriptor is a part of."""
-//|
 STATIC mp_obj_t bleio_descriptor_get_characteristic(mp_obj_t self_in) {
     bleio_descriptor_obj_t *self = MP_OBJ_TO_PTR(self_in);
 
@@ -161,12 +161,8 @@ STATIC mp_obj_t bleio_descriptor_get_characteristic(mp_obj_t self_in) {
 }
 STATIC MP_DEFINE_CONST_FUN_OBJ_1(bleio_descriptor_get_characteristic_obj, bleio_descriptor_get_characteristic);
 
-const mp_obj_property_t bleio_descriptor_characteristic_obj = {
-    .base.type = &mp_type_property,
-    .proxy = { (mp_obj_t)&bleio_descriptor_get_characteristic_obj,
-               MP_ROM_NONE,
-               MP_ROM_NONE },
-};
+MP_PROPERTY_GETTER(bleio_descriptor_characteristic_obj,
+    (mp_obj_t)&bleio_descriptor_get_characteristic_obj);
 
 //|     value: bytearray
 //|     """The value of this descriptor."""
@@ -192,12 +188,9 @@ STATIC mp_obj_t bleio_descriptor_set_value(mp_obj_t self_in, mp_obj_t value_in) 
 }
 STATIC MP_DEFINE_CONST_FUN_OBJ_2(bleio_descriptor_set_value_obj, bleio_descriptor_set_value);
 
-const mp_obj_property_t bleio_descriptor_value_obj = {
-    .base.type = &mp_type_property,
-    .proxy = { (mp_obj_t)&bleio_descriptor_get_value_obj,
-               (mp_obj_t)&bleio_descriptor_set_value_obj,
-               MP_ROM_NONE },
-};
+MP_PROPERTY_GETSET(bleio_descriptor_value_obj,
+    (mp_obj_t)&bleio_descriptor_get_value_obj,
+    (mp_obj_t)&bleio_descriptor_set_value_obj);
 
 STATIC const mp_rom_map_elem_t bleio_descriptor_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_add_to_characteristic), MP_ROM_PTR(&bleio_descriptor_add_to_characteristic_obj) },
@@ -219,9 +212,10 @@ STATIC void bleio_descriptor_print(const mp_print_t *print, mp_obj_t self_in, mp
     }
 }
 
-const mp_obj_type_t bleio_descriptor_type = {
-    { &mp_type_type },
-    .name = MP_QSTR_Descriptor,
-    .print = bleio_descriptor_print,
-    .locals_dict = (mp_obj_dict_t *)&bleio_descriptor_locals_dict
-};
+MP_DEFINE_CONST_OBJ_TYPE(
+    bleio_descriptor_type,
+    MP_QSTR_Descriptor,
+    MP_TYPE_FLAG_HAS_SPECIAL_ACCESSORS,
+    print, bleio_descriptor_print,
+    locals_dict, &bleio_descriptor_locals_dict
+    );

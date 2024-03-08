@@ -27,6 +27,7 @@
 #include "py/objstr.h"
 #include "py/runtime.h"
 #include "shared-bindings/microcontroller/Processor.h"
+#include "shared-bindings/supervisor/__init__.h"
 #include "supervisor/background_callback.h"
 #include "supervisor/port.h"
 #include "supervisor/serial.h"
@@ -34,6 +35,10 @@
 #include "supervisor/shared/workflow.h"
 #include "shared/runtime/interrupt_char.h"
 #include "shared/readline/readline.h"
+
+#if CIRCUITPY_STATUS_BAR
+#include "supervisor/shared/status_bar.h"
+#endif
 
 #if CIRCUITPY_STORAGE
 #include "shared-module/storage/__init__.h"
@@ -49,6 +54,11 @@
 
 #if CIRCUITPY_USB_MIDI
 #include "shared-module/usb_midi/__init__.h"
+#endif
+
+
+#if CIRCUITPY_USB_VIDEO
+#include "shared-module/usb_video/__init__.h"
 #endif
 
 #include "tusb.h"
@@ -81,9 +91,30 @@ MP_WEAK void post_usb_init(void) {
 }
 
 void usb_init(void) {
-    init_usb_hardware();
 
-    tusb_init();
+    usb_identification_t defaults;
+    usb_identification_t *identification;
+    if (custom_usb_identification != NULL) {
+        identification = custom_usb_identification;
+    } else {
+        // This compiles to less code than using a struct initializer.
+        defaults.vid = USB_VID;
+        defaults.pid = USB_PID;
+        strcpy(defaults.manufacturer_name, USB_MANUFACTURER);
+        strcpy(defaults.product_name, USB_PRODUCT);
+        identification = &defaults;
+        // This memory only needs to be live through the end of usb_build_descriptors.
+    }
+    if (!usb_build_descriptors(identification)) {
+        return;
+    }
+    init_usb_hardware();
+    #if CIRCUITPY_USB_HID
+    usb_hid_build_report_descriptor();
+    #endif
+
+    // Only init device. Host gets inited by the `usb_host` module common-hal.
+    tud_init(TUD_OPT_RHPORT);
 
     post_usb_init();
 
@@ -118,34 +149,6 @@ void usb_set_defaults(void) {
     #endif
 };
 
-// Some dynamic USB data must be saved after boot.py. How much is needed?
-size_t usb_boot_py_data_size(void) {
-    size_t size = 0;
-
-    #if CIRCUITPY_USB_HID
-    size += usb_hid_report_descriptor_length();
-    #endif
-
-    return size;
-}
-
-// Fill in the data to save.
-void usb_get_boot_py_data(uint8_t *temp_storage, size_t temp_storage_size) {
-    #if CIRCUITPY_USB_HID
-    usb_hid_build_report_descriptor(temp_storage, temp_storage_size);
-    #endif
-}
-
-// After VM is gone, save data into non-heap storage (storage_allocations).
-void usb_return_boot_py_data(uint8_t *temp_storage, size_t temp_storage_size) {
-    #if CIRCUITPY_USB_HID
-    usb_hid_save_report_descriptor(temp_storage, temp_storage_size);
-    #endif
-
-    // Now we can also build the rest of the descriptors and place them in storage_allocations.
-    usb_build_descriptors();
-}
-
 // Call this when ready to run code.py or a REPL, and a VM has been started.
 void usb_setup_with_vm(void) {
     #if CIRCUITPY_USB_HID
@@ -163,8 +166,15 @@ void usb_disconnect(void) {
 
 void usb_background(void) {
     if (usb_enabled()) {
-        #if CFG_TUSB_OS == OPT_OS_NONE
+        #if CFG_TUSB_OS == OPT_OS_NONE || CFG_TUSB_OS == OPT_OS_PICO
         tud_task();
+        #if CIRCUITPY_USB_HOST
+        tuh_task();
+        #endif
+        #elif CFG_TUSB_OS == OPT_OS_FREERTOS
+        // Yield to FreeRTOS in case TinyUSB runs in a separate task. Don't use
+        // port_yield() because it has a longer delay.
+        vTaskDelay(0);
         #endif
         // No need to flush if there's no REPL.
         #if CIRCUITPY_USB_CDC
@@ -172,6 +182,9 @@ void usb_background(void) {
             // Console will always be itf 0.
             tud_cdc_write_flush();
         }
+        #endif
+        #if CIRCUITPY_USB_VIDEO
+        usb_video_task();
         #endif
     }
 }
@@ -181,12 +194,23 @@ static void usb_background_do(void *unused) {
     usb_background();
 }
 
-void usb_background_schedule(void) {
+void PLACE_IN_ITCM(usb_background_schedule)(void) {
     background_callback_add(&usb_callback, usb_background_do, NULL);
 }
 
-void usb_irq_handler(void) {
-    tud_int_handler(0);
+void PLACE_IN_ITCM(usb_irq_handler)(int instance) {
+    #if CFG_TUSB_MCU != OPT_MCU_RP2040
+    // For rp2040, IRQ handler is already installed and invoked automatically
+    if (instance == CIRCUITPY_USB_DEVICE_INSTANCE) {
+        tud_int_handler(instance);
+    }
+    #if CIRCUITPY_USB_HOST
+    else if (instance == CIRCUITPY_USB_HOST_INSTANCE) {
+        tuh_int_handler(instance);
+    }
+    #endif
+    #endif
+
     usb_background_schedule();
 }
 
@@ -232,6 +256,11 @@ void tud_cdc_line_state_cb(uint8_t itf, bool dtr, bool rts) {
         if (coding.bit_rate == 1200) {
             reset_to_bootloader();
         }
+    } else {
+        #if CIRCUITPY_STATUS_BAR
+        // We are connected, let's request a title bar update.
+        supervisor_status_bar_request_update(true);
+        #endif
     }
 }
 
@@ -290,20 +319,33 @@ bool tud_vendor_control_xfer_cb(uint8_t rhport, uint8_t stage, tusb_control_requ
 #endif // CIRCUITPY_USB_VENDOR
 
 
-#if MICROPY_KBD_EXCEPTION
+#if MICROPY_KBD_EXCEPTION && CIRCUITPY_USB_CDC
+
+// The CDC RX buffer impacts monitoring for ctrl-c. TinyUSB will only ask for
+// more from CDC if the free space in the buffer is greater than the endpoint
+// size. Setting CFG_TUD_CDC_RX_BUFSIZE to the endpoint size and then sending
+// any character will prevent ctrl-c from working. Require at least a 64
+// character buffer.
+#if CFG_TUD_CDC_RX_BUFSIZE < CFG_TUD_CDC_EP_BUFSIZE + 64
+#error "CFG_TUD_CDC_RX_BUFSIZE must be 64 bytes bigger than endpoint size."
+#endif
 
 /**
  * Callback invoked when received an "wanted" char.
  * @param itf           Interface index (for multiple cdc interfaces)
  * @param wanted_char   The wanted char (set previously)
  */
-
-// Only called when console is enabled.
 void tud_cdc_rx_wanted_cb(uint8_t itf, char wanted_char) {
     // Workaround for using shared/runtime/interrupt_char.c
     // Compare mp_interrupt_char with wanted_char and ignore if not matched
     if (mp_interrupt_char == wanted_char) {
         tud_cdc_n_read_flush(itf);    // flush read fifo
+        mp_sched_keyboard_interrupt();
+    }
+}
+
+void tud_cdc_send_break_cb(uint8_t itf, uint16_t duration_ms) {
+    if (usb_cdc_console_enabled() && mp_interrupt_char != -1 && itf == 0 && duration_ms > 0) {
         mp_sched_keyboard_interrupt();
     }
 }

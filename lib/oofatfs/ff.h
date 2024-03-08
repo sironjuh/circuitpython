@@ -162,7 +162,7 @@ typedef struct {
     DWORD   bitbase;        /* Allocation bitmap base sector */
 #endif
     DWORD   winsect;        /* Current sector appearing in the win[] */
-    BYTE    win[FF_MAX_SS]; /* Disk access window for Directory, FAT (and file data at tiny cfg) */
+    __attribute__((aligned(FF_WINDOW_ALIGNMENT),)) BYTE    win[FF_MAX_SS]; /* Disk access window for Directory, FAT (and file data at tiny cfg). */
 } FATFS;
 
 
@@ -332,6 +332,10 @@ FRESULT f_setcp (WORD cp);                                          /* Set curre
 /* RTC function */
 #if !FF_FS_READONLY && !FF_FS_NORTC
 DWORD get_fattime (void);
+#endif
+
+#if FF_FS_MAKE_VOLID
+DWORD make_volid (void);
 #endif
 
 /* LFN support functions */

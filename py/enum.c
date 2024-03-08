@@ -28,7 +28,7 @@
 #include "py/runtime.h"
 
 mp_obj_t cp_enum_find(const mp_obj_type_t *type, int value) {
-    const mp_obj_dict_t *dict = type->locals_dict;
+    const mp_obj_dict_t *dict = MP_OBJ_TYPE_GET_SLOT(type, locals_dict);
     for (size_t i = 0; i < dict->map.used; i++) {
         const cp_enum_obj_t *v = MP_OBJ_TO_PTR(dict->map.table[i].value);
         if (v->value == value) {
@@ -38,10 +38,8 @@ mp_obj_t cp_enum_find(const mp_obj_type_t *type, int value) {
     return mp_const_none;
 }
 
-int cp_enum_value(const mp_obj_type_t *type, mp_obj_t obj) {
-    if (!mp_obj_is_type(obj, type)) {
-        mp_raise_TypeError_varg(MP_ERROR_TEXT("Expected a %q"), type->name);
-    }
+int cp_enum_value(const mp_obj_type_t *type, mp_obj_t obj, qstr arg_name) {
+    (void)mp_arg_validate_type(obj, type, arg_name);
     return ((cp_enum_obj_t *)MP_OBJ_TO_PTR(obj))->value;
 }
 
