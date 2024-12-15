@@ -1,3 +1,11 @@
+// This file is part of the CircuitPython project: https://circuitpython.org
+//
+// SPDX-FileCopyrightText: Copyright (c) 2017 Scott Shawcroft for Adafruit Industries
+//
+// SPDX-License-Identifier: MIT
+
+#pragma once
+
 #define MICROPY_HW_BOARD_NAME "Adafruit SHT4x Trinkey M0"
 #define MICROPY_HW_MCU_NAME "samd21e18"
 
@@ -52,5 +60,5 @@
 #define IGNORE_PIN_PB30     1
 #define IGNORE_PIN_PB31     1
 
-#define DEFAULT_I2C_BUS_SCL (&pin_PA04)
-#define DEFAULT_I2C_BUS_SDA (&pin_PA05)
+#define DEFAULT_I2C_BUS_SCL (&pin_PA05)
+#define DEFAULT_I2C_BUS_SDA (&pin_PA04)

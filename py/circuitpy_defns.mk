@@ -105,7 +105,10 @@ ifeq ($(CIRCUITPY_AESIO),1)
 SRC_PATTERNS += aesio/%
 endif
 ifeq ($(CIRCUITPY_ALARM),1)
-SRC_PATTERNS += alarm/%
+SRC_PATTERNS += alarm/__init__.c alarm/SleepMemory.c alarm/pin/% alarm/time/%
+endif
+ifeq ($(CIRCUITPY_ALARM_TOUCH),1)
+SRC_PATTERNS += alarm/touch/%
 endif
 ifeq ($(CIRCUITPY_ANALOGBUFIO),1)
 SRC_PATTERNS += analogbufio/%
@@ -128,11 +131,20 @@ endif
 ifeq ($(CIRCUITPY_AUDIOCORE),1)
 SRC_PATTERNS += audiocore/%
 endif
+ifeq ($(CIRCUITPY_AUDIODELAYS),1)
+SRC_PATTERNS += audiodelays/%
+endif
+ifeq ($(CIRCUITPY_AUDIOFILTERS),1)
+SRC_PATTERNS += audiofilters/%
+endif
 ifeq ($(CIRCUITPY_AUDIOMIXER),1)
 SRC_PATTERNS += audiomixer/%
 endif
 ifeq ($(CIRCUITPY_AUDIOMP3),1)
 SRC_PATTERNS += audiomp3/%
+endif
+ifeq ($(CIRCUITPY_AURORA_EPAPER),1)
+SRC_PATTERNS += aurora_epaper/%
 endif
 ifeq ($(CIRCUITPY_BITBANGIO),1)
 SRC_PATTERNS += bitbangio/%
@@ -252,11 +264,17 @@ endif
 ifeq ($(CIRCUITPY_KEYPAD),1)
 SRC_PATTERNS += keypad/%
 endif
+ifeq ($(CIRCUITPY_KEYPAD_DEMUX),1)
+SRC_PATTERNS += keypad_demux/%
+endif
 ifeq ($(CIRCUITPY_LOCALE),1)
 SRC_PATTERNS += locale/%
 endif
 ifeq ($(CIRCUITPY_MATH),1)
 SRC_PATTERNS += math/%
+endif
+ifeq ($(CIRCUITPY_MAX3421E),1)
+SRC_PATTERNS += max3421e/%
 endif
 ifeq ($(CIRCUITPY_MEMORYMAP),1)
 SRC_PATTERNS += memorymap/%
@@ -387,6 +405,9 @@ endif
 ifeq ($(CIRCUITPY_UHEAP),1)
 SRC_PATTERNS += uheap/%
 endif
+ifeq ($(CIRCUITPY_PYUSB),1)
+SRC_PATTERNS += usb/%
+endif
 ifeq ($(CIRCUITPY_USB_CDC),1)
 SRC_PATTERNS += usb_cdc/%
 endif
@@ -397,7 +418,7 @@ ifeq ($(CIRCUITPY_USB_VIDEO),1)
 SRC_PATTERNS += usb_video/%
 endif
 ifeq ($(CIRCUITPY_USB_HOST),1)
-SRC_PATTERNS += usb_host/% usb/%
+SRC_PATTERNS += usb_host/%
 endif
 ifeq ($(CIRCUITPY_USB_MIDI),1)
 SRC_PATTERNS += usb_midi/%
@@ -475,6 +496,7 @@ SRC_COMMON_HAL_ALL = \
 	dotclockframebuffer/DotClockFramebuffer.c \
 	dotclockframebuffer/__init__.c \
 	dualbank/__init__.c \
+	floppyio/__init__.c \
 	frequencyio/FrequencyIn.c \
 	frequencyio/__init__.c \
 	imagecapture/ParallelImageCapture.c \
@@ -485,6 +507,7 @@ SRC_COMMON_HAL_ALL = \
 	gnss/SatelliteSystem.c \
 	i2ctarget/I2CTarget.c \
 	i2ctarget/__init__.c \
+	max3421e/Max3421E.c \
 	memorymap/__init__.c \
 	memorymap/AddressRange.c \
 	microcontroller/__init__.c \
@@ -516,8 +539,6 @@ SRC_COMMON_HAL_ALL = \
 	socketpool/__init__.c \
 	socketpool/SocketPool.c \
 	socketpool/Socket.c \
-	supervisor/Runtime.c \
-	supervisor/__init__.c \
 	usb_host/__init__.c \
 	usb_host/Port.c \
 	watchdog/WatchDogMode.c \
@@ -569,6 +590,7 @@ $(filter $(SRC_PATTERNS), \
 	qrio/PixelPolicy.c \
 	qrio/QRInfo.c \
 	supervisor/RunReason.c \
+	supervisor/Runtime.c \
 	supervisor/StatusBar.c \
 	wifi/AuthMode.c \
 	wifi/Packet.c \
@@ -601,6 +623,10 @@ SRC_SHARED_MODULE_ALL = \
 	audiocore/RawSample.c \
 	audiocore/WaveFile.c \
 	audiocore/__init__.c \
+	audiodelays/Echo.c \
+	audiodelays/__init__.c \
+	audiofilters/Filter.c \
+	audiofilters/__init__.c \
 	audioio/__init__.c \
 	audiomixer/Mixer.c \
 	audiomixer/MixerVoice.c \
@@ -608,6 +634,8 @@ SRC_SHARED_MODULE_ALL = \
 	audiomp3/MP3Decoder.c \
 	audiomp3/__init__.c \
 	audiopwmio/__init__.c \
+	aurora_epaper/aurora_framebuffer.c \
+	aurora_epaper/__init__.c \
 	bitbangio/I2C.c \
 	bitbangio/SPI.c \
 	bitbangio/__init__.c \
@@ -661,6 +689,8 @@ SRC_SHARED_MODULE_ALL = \
 	keypad/KeyMatrix.c \
 	keypad/ShiftRegisterKeys.c \
 	keypad/Keys.c \
+	max3421e/__init__.c \
+	max3421e/Max3421E.c \
 	memorymonitor/__init__.c \
 	memorymonitor/AllocationAlarm.c \
 	memorymonitor/AllocationSize.c \
@@ -687,6 +717,7 @@ SRC_SHARED_MODULE_ALL = \
 	supervisor/__init__.c \
 	supervisor/StatusBar.c \
 	synthio/Biquad.c \
+	synthio/BlockBiquad.c \
 	synthio/LFO.c \
 	synthio/Math.c \
 	synthio/MidiTrack.c \
@@ -739,6 +770,12 @@ SRC_SHARED_MODULE_ALL += \
 	ssl/SSLSocket.c
 endif
 
+ifeq ($(CIRCUITPY_KEYPAD_DEMUX),1)
+SRC_SHARED_MODULE_ALL += \
+	keypad_demux/__init__.c \
+	keypad_demux/DemuxKeyMatrix.c
+endif
+
 # If supporting _bleio via HCI, make devices/ble_hci/common-hal/_bleio be includable,
 # and use C source files in devices/ble_hci/common-hal.
 ifeq ($(CIRCUITPY_BLEIO_HCI),1)
@@ -764,7 +801,11 @@ SRC_MOD += $(addprefix lib/mp3/src/, \
 	subband.c \
 	trigtabs.c \
 )
-$(BUILD)/lib/mp3/src/buffers.o: CFLAGS += -include "py/misc.h" -D'MPDEC_ALLOCATOR(x)=m_malloc(x)' -D'MPDEC_FREE(x)=m_free(x)'
+$(BUILD)/lib/mp3/src/buffers.o: CFLAGS += -include "shared-module/audiomp3/__init__.h" -D'MPDEC_ALLOCATOR(x)=mp3_alloc(x)' -D'MPDEC_FREE(x)=mp3_free(x)' -fwrapv
+ifeq ($(CIRCUITPY_AUDIOMP3_USE_PORT_ALLOCATOR),1)
+SRC_COMMON_HAL_ALL += \
+	audiomp3/__init__.c
+endif
 endif
 
 ifeq ($(CIRCUITPY_GIFIO),1)

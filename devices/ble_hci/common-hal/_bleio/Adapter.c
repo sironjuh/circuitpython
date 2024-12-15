@@ -1,30 +1,10 @@
-/*
- * This file is part of the MicroPython project, http://micropython.org/
- *
- * The MIT License (MIT)
- *
- * Copyright (c) 2020 Dan Halbert for Adafruit Industries
- * Copyright (c) 2016 Glenn Ruben Bakke
- * Copyright (c) 2018 Artur Pacholec
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- */
+// This file is part of the CircuitPython project: https://circuitpython.org
+//
+// SPDX-FileCopyrightText: Copyright (c) 2020 Dan Halbert for Adafruit Industries
+// SPDX-FileCopyrightText: Copyright (c) 2016 Glenn Ruben Bakke
+// SPDX-FileCopyrightText: Copyright (c) 2018 Artur Pacholec
+//
+// SPDX-License-Identifier: MIT
 
 #include <math.h>
 #include <stdint.h>
@@ -77,7 +57,7 @@
 
 bleio_connection_internal_t bleio_connections[BLEIO_TOTAL_CONNECTION_COUNT];
 
-STATIC void add_generic_services(bleio_adapter_obj_t *adapter) {
+static void add_generic_services(bleio_adapter_obj_t *adapter) {
     // Create Generic Access UUID, Service, and Characteristics.
 
     // Generic Access Service setup.
@@ -178,13 +158,13 @@ STATIC void add_generic_services(bleio_adapter_obj_t *adapter) {
 }
 
 
-STATIC void check_enabled(bleio_adapter_obj_t *adapter) {
+static void check_enabled(bleio_adapter_obj_t *adapter) {
     if (!common_hal_bleio_adapter_get_enabled(adapter)) {
         mp_raise_bleio_BluetoothError(MP_ERROR_TEXT("Adapter not enabled"));
     }
 }
 
-// STATIC bool adapter_on_ble_evt(ble_evt_t *ble_evt, void *self_in) {
+// static bool adapter_on_ble_evt(ble_evt_t *ble_evt, void *self_in) {
 //     bleio_adapter_obj_t *self = (bleio_adapter_obj_t*)self_in;
 
 //     // For debugging.
@@ -267,11 +247,18 @@ STATIC void check_enabled(bleio_adapter_obj_t *adapter) {
 //     return true;
 // }
 
-char default_ble_name[] = { 'C', 'I', 'R', 'C', 'U', 'I', 'T', 'P', 'Y', 0, 0, 0, 0};
+// Includes trailing null.
+char default_ble_name[] = { 'C', 'I', 'R', 'C', 'U', 'I', 'T', 'P', 'Y', 0, 0, 0, 0, 0};
+
+static void _adapter_set_name(bleio_adapter_obj_t *self, mp_obj_str_t *name_obj) {
+    mp_buffer_info_t bufinfo;
+    mp_get_buffer_raise(name_obj, &bufinfo, MP_BUFFER_READ);
+    bleio_characteristic_set_local_value(self->device_name_characteristic, &bufinfo);
+}
 
 // Get various values and limits set by the adapter.
 // Set event mask.
-STATIC void bleio_adapter_hci_init(bleio_adapter_obj_t *self) {
+static void bleio_adapter_hci_init(bleio_adapter_obj_t *self) {
     mp_int_t name_len = 0;
 
     #if CIRCUITPY_OS_GETENV
@@ -283,7 +270,7 @@ STATIC void bleio_adapter_hci_init(bleio_adapter_obj_t *self) {
     #endif
 
     if (!self->name) {
-        name_len = sizeof(default_ble_name);
+        name_len = sizeof(default_ble_name) - 1;
         bt_addr_t addr;
         hci_check_error(hci_read_bd_addr(&addr));
 
@@ -291,8 +278,10 @@ STATIC void bleio_adapter_hci_init(bleio_adapter_obj_t *self) {
         default_ble_name[name_len - 3] = nibble_to_hex_lower[addr.val[1] & 0xf];
         default_ble_name[name_len - 2] = nibble_to_hex_lower[addr.val[0] >> 4 & 0xf];
         default_ble_name[name_len - 1] = nibble_to_hex_lower[addr.val[0] & 0xf];
+        // default_ble_name[name_len] will be zero.
         self->name = mp_obj_new_str(default_ble_name, (uint8_t)name_len);
     }
+    _adapter_set_name(self, self->name);
 
     // Get version information.
     if (hci_read_local_version(&self->hci_version, &self->hci_revision, &self->lmp_version,
@@ -358,7 +347,6 @@ void common_hal_bleio_adapter_construct_hci_uart(bleio_adapter_obj_t *self, busi
 
     common_hal_bleio_adapter_set_enabled(self, true);
     bleio_adapter_hci_init(self);
-    common_hal_bleio_adapter_set_name(self, default_ble_name);
 }
 
 void common_hal_bleio_adapter_set_enabled(bleio_adapter_obj_t *self, bool enabled) {
@@ -426,13 +414,11 @@ mp_obj_str_t *common_hal_bleio_adapter_get_name(bleio_adapter_obj_t *self) {
 
 void common_hal_bleio_adapter_set_name(bleio_adapter_obj_t *self, const char *name) {
     self->name = mp_obj_new_str(name, strlen(name));
-    mp_buffer_info_t bufinfo;
-    mp_get_buffer_raise(self->name, &bufinfo, MP_BUFFER_READ);
-    bleio_characteristic_set_local_value(self->device_name_characteristic, &bufinfo);
+    _adapter_set_name(self, self->name);
 }
 
 
-// STATIC bool scan_on_ble_evt(ble_evt_t *ble_evt, void *scan_results_in) {
+// static bool scan_on_ble_evt(ble_evt_t *ble_evt, void *scan_results_in) {
 //     bleio_scanresults_obj_t *scan_results = (bleio_scanresults_obj_t*)scan_results_in;
 
 //     if (ble_evt->header.evt_id == BLE_GAP_EVT_TIMEOUT &&
@@ -530,7 +516,7 @@ void common_hal_bleio_adapter_stop_scan(bleio_adapter_obj_t *self) {
 //     volatile bool done;
 // } connect_info_t;
 
-// STATIC bool connect_on_ble_evt(ble_evt_t *ble_evt, void *info_in) {
+// static bool connect_on_ble_evt(ble_evt_t *ble_evt, void *info_in) {
 //     connect_info_t *info = (connect_info_t*)info_in;
 
 //     switch (ble_evt->header.evt_id) {
@@ -627,13 +613,13 @@ mp_obj_t common_hal_bleio_adapter_connect(bleio_adapter_obj_t *self, bleio_addre
     return mp_const_none;
 }
 
-STATIC void check_data_fit(size_t data_len, bool connectable) {
+static void check_data_fit(size_t data_len, bool connectable) {
     if (data_len > MAX_ADVERTISEMENT_SIZE) {
         mp_raise_ValueError(MP_ERROR_TEXT("Data too large for advertisement packet"));
     }
 }
 
-// STATIC bool advertising_on_ble_evt(ble_evt_t *ble_evt, void *self_in) {
+// static bool advertising_on_ble_evt(ble_evt_t *ble_evt, void *self_in) {
 //     bleio_adapter_obj_t *self = (bleio_adapter_obj_t*)self_in;
 
 //     switch (ble_evt->header.evt_id) {
