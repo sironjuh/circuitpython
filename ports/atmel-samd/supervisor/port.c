@@ -411,8 +411,6 @@ void reset_port(void) {
         reset_ticks();
     }
 
-    reset_all_pins();
-
     // Output clocks for debugging.
     // not supported by SAMD51G; uncomment for SAMD51J or update for 51G
     // #ifdef SAM_D5X_E5X
@@ -686,7 +684,7 @@ void port_idle_until_interrupt(void) {
 /**
  * \brief Default interrupt handler for unused IRQs.
  */
-__attribute__((used)) void HardFault_Handler(void) {
+__attribute__((used)) NORETURN void HardFault_Handler(void) {
     #ifdef ENABLE_MICRO_TRACE_BUFFER
     // Turn off the micro trace buffer so we don't fill it up in the infinite
     // loop below.

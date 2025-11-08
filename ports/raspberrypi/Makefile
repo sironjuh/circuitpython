@@ -12,6 +12,7 @@ HAL_DIR=hal/$(MCU_SERIES)
 
 ifeq ($(CIRCUITPY_CYW43),1)
 INC_CYW43 := \
+	-isystem lib/cyw43-driver \
 	-isystem lib/cyw43-driver/firmware \
 	-isystem lib/cyw43-driver/src \
 	-isystem lib/lwip/src/include \
@@ -24,7 +25,8 @@ INC_CYW43 := \
 CFLAGS_CYW43 := \
 	-DCYW43_LWIP=1 \
 	-DPICO_CYW43_ARCH_THREADSAFE_BACKGROUND=1 \
-	-DCYW43_USE_SPI \
+	-DCYW43_USE_SPI=1 \
+	-DUSE_SDIOIT=0 \
 	-DIGNORE_GPIO25 \
 	-DIGNORE_GPIO23 \
 	-DIGNORE_GPIO24 \
@@ -32,6 +34,7 @@ CFLAGS_CYW43 := \
 	-DCYW43_USE_STATS=0 \
 	-DPICO_BUILD \
 	-DCYW43_ENABLE_BLUETOOTH=0 \
+	-DCIRCUITPY_CYW43_INIT_DELAY=$(CIRCUITPY_CYW43_INIT_DELAY) \
 	-DPICO_CYW43_ARCH_POLL=0
 
 SRC_SDK_CYW43 := \
@@ -91,8 +94,6 @@ INC += \
 	-I../shared/timeutils \
 	-Iboards/$(BOARD) \
 	-Iboards/ \
-	-isystem ./../../lib/cmsis/inc \
-	-isystem sdk/ \
 	-isystem sdk/src/common/boot_picobin_headers/include/ \
 	-isystem sdk/src/common/boot_picoboot_headers/include/ \
 	-isystem sdk/src/common/hardware_claim/include/ \
@@ -106,6 +107,8 @@ INC += \
 	-isystem sdk/src/$(CHIP_VARIANT_LOWER)/hardware_structs/include/ \
 	-isystem sdk/src/$(CHIP_VARIANT_LOWER)/pico_platform/include/ \
 	-isystem sdk/src/rp2_common/boot_bootrom_headers/include/ \
+	-isystem sdk/src/rp2_common/cmsis/stub/CMSIS/Core/Include/ \
+	-isystem sdk/src/rp2_common/cmsis/stub/CMSIS/Device/${CHIP_VARIANT}/Include \
 	-isystem sdk/src/rp2_common/cmsis/ \
 	-isystem sdk/src/rp2_common/hardware_adc/include/ \
 	-isystem sdk/src/rp2_common/hardware_base/include/ \
@@ -123,6 +126,7 @@ INC += \
 	-isystem sdk/src/rp2_common/hardware_powman/include/ \
 	-isystem sdk/src/rp2_common/hardware_pwm/include/ \
 	-isystem sdk/src/rp2_common/hardware_resets/include/ \
+	-isystem sdk/src/rp2_common/hardware_rcp/include/ \
 	-isystem sdk/src/rp2_common/hardware_rtc/include/ \
 	-isystem sdk/src/rp2_common/hardware_spi/include/ \
 	-isystem sdk/src/rp2_common/hardware_sync/include/ \
@@ -147,12 +151,13 @@ INC += \
 	-isystem sdk/src/rp2_common/pico_float/include/ \
 	-isystem sdk/src/rp2_common/pico_runtime/include/ \
 	-isystem sdk/src/rp2_common/pico_runtime_init/include/ \
+	-isystem sdk/src/rp2_common/pico_platform_common/include/ \
 	-isystem sdk/src/rp2_common/pico_platform_compiler/include/ \
 	-isystem sdk/src/rp2_common/pico_platform_sections/include/ \
 	-isystem sdk/src/rp2_common/pico_platform_panic/include/ \
 	-isystem sdk/src/rp2_common/pico_time_adapter/include/ \
 	-isystem sdk/src/rp2_common/pico_unique_id/include/ \
-$(INC_CYW43) \
+	$(INC_CYW43) \
 	-Isdk_config \
 	-I../../lib/tinyusb/src \
 	-I../../supervisor/shared/usb \
@@ -207,7 +212,7 @@ CFLAGS += $(OPTIMIZATION_FLAGS)
 CFLAGS += $(CFLAGS_CYW43)
 #Debugging/Optimization
 ifeq ($(DEBUG), 1)
-  CFLAGS += -ggdb3 -O3
+  CFLAGS += -ggdb3 -Og
   # No LTO because we may place some functions in RAM instead of flash.
 else
   CFLAGS += -DNDEBUG
@@ -219,10 +224,9 @@ else
   endif
 endif
 
-# Remove -Wno-stringop-overflow after we can test with CI's GCC 10. Mac's looks weird.
-DISABLE_WARNINGS = -Wno-stringop-overflow -Wno-cast-align
+DISABLE_WARNINGS = -Wno-cast-align
 
-CFLAGS += $(INC) -Wall -Werror -std=gnu11 -fshort-enums $(BASE_CFLAGS) $(CFLAGS_MOD) $(COPT) $(DISABLE_WARNINGS) -Werror=missing-prototypes
+CFLAGS += $(INC) -Wtype-limits -Wall -Werror -std=gnu11 -fshort-enums $(BASE_CFLAGS) $(CFLAGS_MOD) $(COPT) $(DISABLE_WARNINGS) -Werror=missing-prototypes -Wold-style-definition
 
 PICO_LDFLAGS = --specs=nosys.specs --specs=nano.specs
 
@@ -455,7 +459,7 @@ SRC_S_UPPER_CHIP_VARIANT := \
 	sdk/src/rp2_common/pico_double/double_fma_dcp.S \
 	sdk/src/rp2_common/pico_double/double_sci_m33.S \
 	sdk/src/rp2_common/pico_float/float_sci_m33_vfp.S \
-	sdk/src/rp2_common/pico_float/float_conv_m33.S \
+	sdk/src/rp2_common/pico_float/float_common_m33.S \
 
 PICO_LDFLAGS += $(PICO_WRAP_FLOAT_SCI_FLAGS) $(PICO_WRAP_DOUBLE_FLAGS)
 
@@ -557,14 +561,18 @@ ifeq ($(CIRCUITPY_PICODVI),1)
 SRC_C += \
 	bindings/picodvi/__init__.c \
 	bindings/picodvi/Framebuffer.c \
+	common-hal/picodvi/__init__.c \
 	common-hal/picodvi/Framebuffer_$(CHIP_VARIANT).c \
 
 ifeq ($(CHIP_VARIANT),RP2040)
-SRC_C += \
+SRC_PICODVI := \
 	lib/PicoDVI/software/libdvi/dvi.c \
 	lib/PicoDVI/software/libdvi/dvi_serialiser.c \
 	lib/PicoDVI/software/libdvi/dvi_timing.c \
 	lib/PicoDVI/software/libdvi/tmds_encode.c \
+
+SRC_C += $(SRC_PICODVI)
+$(patsubst %.c,$(BUILD)/%.o,$(SRC_PICODVI))): CFLAGS += -Wno-old-style-definition
 
 endif
 
@@ -650,7 +658,7 @@ CFLAGS += \
 	  -isystem $(TOP)/lib/mbedtls/include \
 	  -DMBEDTLS_CONFIG_FILE='"$(TOP)/lib/mbedtls_config/mbedtls_config.h"' \
 
-$(BUILD)/x509_crt_bundle.S: $(TOP)/lib/certificates/data/roots.pem $(TOP)/tools/gen_crt_bundle.py
+$(BUILD)/x509_crt_bundle.S: $(TOP)/lib/certificates/data/roots-full.pem $(TOP)/tools/gen_crt_bundle.py
 	$(Q)$(PYTHON) $(TOP)/tools/gen_crt_bundle.py -i $< -o $@ --asm
 OBJ_MBEDTLS := $(BUILD)/x509_crt_bundle.o
 $(patsubst %.c,$(BUILD)/%.o,$(SRC_MBEDTLS))): CFLAGS += -Wno-suggest-attribute=format
@@ -658,27 +666,13 @@ else
 OBJ_MBEDTLS :=
 endif
 
-
-SRC_COMMON_HAL_EXPANDED = $(addprefix shared-bindings/, $(SRC_COMMON_HAL)) \
-                          $(addprefix shared-bindings/, $(SRC_BINDINGS_ENUMS)) \
-                          $(addprefix common-hal/, $(SRC_COMMON_HAL))
-
-SRC_SHARED_MODULE_EXPANDED = $(addprefix shared-bindings/, $(SRC_SHARED_MODULE)) \
-                             $(addprefix shared-module/, $(SRC_SHARED_MODULE)) \
-                             $(addprefix shared-module/, $(SRC_SHARED_MODULE_INTERNAL))
-
-# There may be duplicates between SRC_COMMON_HAL_EXPANDED and SRC_SHARED_MODULE_EXPANDED,
-# because a few modules have files both in common-hal/ and shared-module/.
-# Doing a $(sort ...) removes duplicates as part of sorting.
-SRC_COMMON_HAL_SHARED_MODULE_EXPANDED = $(sort $(SRC_COMMON_HAL_EXPANDED) $(SRC_SHARED_MODULE_EXPANDED))
-
-SRC_S = supervisor/$(CHIP_FAMILY)_cpu.s
 BOOT2_S_CFLAGS ?= -DPICO_FLASH_SPI_CLKDIV=4
 SRC_S_UPPER = sdk/src/rp2_common/hardware_irq/irq_handler_chain.S \
               sdk/src/rp2_common/pico_bit_ops/bit_ops_aeabi.S \
               sdk/src/rp2_common/pico_double/double_aeabi_$(DOUBLE_EABI).S \
               sdk/src/rp2_common/pico_int64_ops/pico_int64_ops_aeabi.S \
               sdk/src/rp2_common/pico_crt0/crt0.S \
+              supervisor/shared/cpu_regs.S \
               $(SRC_S_UPPER_CHIP_VARIANT)
 
 ifeq ($(CIRCUITPY_PICODVI),1)
@@ -730,7 +724,7 @@ $(BUILD)/boot2.elf: $(BUILD)/stage2.c
 	$(Q)$(CC) $(CFLAGS) $(BOOT2_S_CFLAGS) -Os -ggdb3 -I. -fPIC --specs=nosys.specs -nostartfiles -Wl,-T,boot_stage2/$(CHIP_VARIANT).ld  -Wl,-Map=$@.map -o $@ $<
 	$(Q)$(SIZE) $@
 
-SRC_QSTR += $(SRC_C) $(SRC_SUPERVISOR) $(SRC_COMMON_HAL_EXPANDED) $(SRC_SHARED_MODULE_EXPANDED) $(SRC_CIRCUITPY_COMMON)
+SRC_QSTR += $(SRC_C) $(SRC_SUPERVISOR) $(SRC_COMMON_HAL_SHARED_MODULE_EXPANDED) $(SRC_CIRCUITPY_COMMON)
 
 all: $(BUILD)/firmware.uf2
 

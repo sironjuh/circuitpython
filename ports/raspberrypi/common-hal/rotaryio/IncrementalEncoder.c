@@ -43,6 +43,9 @@ void common_hal_rotaryio_incrementalencoder_construct(rotaryio_incrementalencode
     const mcu_pin_obj_t *pin_a, const mcu_pin_obj_t *pin_b) {
     const mcu_pin_obj_t *pins[] = { pin_a, pin_b };
 
+    // Ensure object starts in its deinit state.
+    common_hal_rotaryio_incrementalencoder_mark_deinit(self);
+
     // Start out with swapped to match behavior with other ports.
     self->swapped = true;
     if (!common_hal_rp2pio_pins_are_sequential(2, pins)) {
@@ -62,14 +65,14 @@ void common_hal_rotaryio_incrementalencoder_construct(rotaryio_incrementalencode
         1000000,
         encoder_init, MP_ARRAY_SIZE(encoder_init), // init
         NULL, 0, // may_exec
-        NULL, 0, 0, 0, // out pin
+        NULL, 0, PIO_PINMASK32_NONE, PIO_PINMASK32_NONE, // out pin
         pins[0], 2, // in pins
-        3, 0, // in pulls
-        NULL, 0, 0, 0x1f, // set pins
-        NULL, 0, false, 0, 0x1f, // sideset pins
+        PIO_PINMASK32_FROM_VALUE(3), PIO_PINMASK32_NONE, // in pulls
+        NULL, 0, PIO_PINMASK32_NONE, PIO_PINMASK32_FROM_VALUE(0x1f), // set pins
+        NULL, 0, false, PIO_PINMASK32_NONE, PIO_PINMASK32_FROM_VALUE(0x1f), // sideset pins
         false, // No sideset enable
         NULL, PULL_NONE, // jump pin
-        0, // wait gpio pins
+        PIO_PINMASK_NONE, // wait gpio pins
         true, // exclusive pin use
         false, 32, false, // out settings
         false, // Wait for txstall
@@ -89,6 +92,7 @@ void common_hal_rotaryio_incrementalencoder_construct(rotaryio_incrementalencode
 }
 
 bool common_hal_rotaryio_incrementalencoder_deinited(rotaryio_incrementalencoder_obj_t *self) {
+    // Use the deinit state of the PIO state machine.
     return common_hal_rp2pio_statemachine_deinited(&self->state_machine);
 }
 
@@ -98,6 +102,11 @@ void common_hal_rotaryio_incrementalencoder_deinit(rotaryio_incrementalencoder_o
     }
     common_hal_rp2pio_statemachine_set_interrupt_handler(&self->state_machine, NULL, NULL, 0);
     common_hal_rp2pio_statemachine_deinit(&self->state_machine);
+}
+
+void common_hal_rotaryio_incrementalencoder_mark_deinit(rotaryio_incrementalencoder_obj_t *self) {
+    // Use the deinit state of the PIO state machine.
+    common_hal_rp2pio_statemachine_mark_deinit(&self->state_machine);
 }
 
 static void incrementalencoder_interrupt_handler(void *self_in) {

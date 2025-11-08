@@ -27,6 +27,7 @@
 //| <https://learn.adafruit.com/circuitpython-essentials/circuitpython-storage>`_.
 //| """
 //|
+//|
 //| def mount(filesystem: VfsFat, mount_path: str, *, readonly: bool = False) -> None:
 //|     """Mounts the given filesystem object at the given path.
 //|
@@ -37,6 +38,7 @@
 //|     :param bool readonly: True when the filesystem should be readonly to CircuitPython.
 //|     """
 //|     ...
+//|
 //|
 static mp_obj_t storage_mount(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
     enum { ARG_filesystem, ARG_mount_path, ARG_readonly };
@@ -52,15 +54,11 @@ static mp_obj_t storage_mount(size_t n_args, const mp_obj_t *pos_args, mp_map_t 
     // get the mount point
     const char *mnt_str = mp_obj_str_get_str(args[ARG_mount_path].u_obj);
 
-    // Make sure we're given an object we can mount.
-    // TODO(tannewt): Make sure we have all the methods we need to operating it
-    // as a file system.
+
     mp_obj_t vfs_obj = args[ARG_filesystem].u_obj;
-    mp_obj_t dest[2];
-    mp_load_method_maybe(vfs_obj, MP_QSTR_mount, dest);
-    if (dest[0] == MP_OBJ_NULL) {
-        mp_raise_ValueError(MP_ERROR_TEXT("filesystem must provide mount method"));
-    }
+
+    // Currently, the only supported filesystem is VfsFat.
+    mp_arg_validate_type(vfs_obj, &mp_fat_vfs_type, MP_QSTR_filesystem);
 
     common_hal_storage_mount(vfs_obj, mnt_str, args[ARG_readonly].u_bool);
 
@@ -74,6 +72,7 @@ MP_DEFINE_CONST_FUN_OBJ_KW(storage_mount_obj, 0, storage_mount);
 //|
 //|     This is the CircuitPython analog to the UNIX ``umount`` command."""
 //|     ...
+//|
 //|
 static mp_obj_t storage_umount(mp_obj_t mnt_in) {
     if (mp_obj_is_str(mnt_in)) {
@@ -90,9 +89,17 @@ MP_DEFINE_CONST_FUN_OBJ_1(storage_umount_obj, storage_umount);
 //|     mount_path: str,
 //|     readonly: bool = False,
 //|     *,
-//|     disable_concurrent_write_protection: bool = False
+//|     disable_concurrent_write_protection: bool = False,
 //| ) -> None:
 //|     """Remounts the given path with new parameters.
+//|
+//|     This can always be done from boot.py. After boot, it can only be done when the host computer
+//|     doesn't have write access and CircuitPython isn't currently writing to the filesystem. An
+//|     exception will be raised if this is the case. Some host OSes allow you to eject a drive which
+//|     will allow for remounting.
+//|
+//|     Remounting after USB is active may take a little time because it "ejects" the drive for one
+//|     query from the host. These queries happen every second or so.
 //|
 //|     :param str mount_path: The path to remount.
 //|     :param bool readonly: True when the filesystem should be readonly to CircuitPython.
@@ -101,6 +108,7 @@ MP_DEFINE_CONST_FUN_OBJ_1(storage_umount_obj, storage_umount);
 //|       allows CircuitPython and a host to write to the same filesystem with the risk that the
 //|       filesystem will be corrupted."""
 //|     ...
+//|
 //|
 static mp_obj_t storage_remount(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
     enum { ARG_mount_path, ARG_readonly, ARG_disable_concurrent_write_protection };
@@ -124,6 +132,7 @@ MP_DEFINE_CONST_FUN_OBJ_KW(storage_remount_obj, 0, storage_remount);
 //| def getmount(mount_path: str) -> VfsFat:
 //|     """Retrieves the mount object associated with the mount path"""
 //|     ...
+//|
 //|
 static mp_obj_t storage_getmount(const mp_obj_t mnt_in) {
     return common_hal_storage_getmount(mp_obj_str_get_str(mnt_in));
@@ -151,6 +160,7 @@ MP_DEFINE_CONST_FUN_OBJ_1(storage_getmount_obj, storage_getmount);
 //|     .. warning:: All the data on ``CIRCUITPY`` will be lost, and
 //|         CircuitPython will restart on certain boards."""
 //|     ...
+//|
 //|
 
 static mp_obj_t storage_erase_filesystem(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
@@ -182,6 +192,7 @@ MP_DEFINE_CONST_FUN_OBJ_KW(storage_erase_filesystem_obj, 0, storage_erase_filesy
 //|     Can be called in ``boot.py``, before USB is connected."""
 //|     ...
 //|
+//|
 static mp_obj_t storage_disable_usb_drive(void) {
     #if CIRCUITPY_USB_DEVICE && CIRCUITPY_USB_MSC
     if (!common_hal_storage_disable_usb_drive()) {
@@ -206,6 +217,7 @@ MP_DEFINE_CONST_FUN_OBJ_0(storage_disable_usb_drive_obj, storage_disable_usb_dri
 //|     not enough endpoints are available.
 //|     """
 //|     ...
+//|
 //|
 static mp_obj_t storage_enable_usb_drive(void) {
     #if CIRCUITPY_USB_DEVICE && CIRCUITPY_USB_MSC
@@ -235,6 +247,7 @@ static const mp_rom_map_elem_t storage_module_globals_table[] = {
 //|         """Create a new VfsFat filesystem around the given block device.
 //|
 //|         :param block_device: Block device the the filesystem lives on"""
+//|
 //|     label: str
 //|     """The filesystem label, up to 11 case-insensitive bytes.  Note that
 //|     this property can only be set when the device is writable by the
@@ -290,6 +303,7 @@ static const mp_rom_map_elem_t storage_module_globals_table[] = {
 //|     def umount(self) -> None:
 //|         """Don't call this directly, call `storage.umount`."""
 //|         ...
+//|
 //|
     { MP_ROM_QSTR(MP_QSTR_VfsFat), MP_ROM_PTR(&mp_fat_vfs_type) },
 };

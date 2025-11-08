@@ -17,10 +17,21 @@
 
 #include "hal/include/hal_gpio.h"
 #include "hal/include/hal_spi_m_sync.h"
-#include "hal/include/hpl_spi_m_sync.h"
 
 #include "samd/dma.h"
 #include "samd/sercom.h"
+
+
+static void setup_pin(const mcu_pin_obj_t *pin, uint32_t pinmux, const enum gpio_direction direction) {
+    gpio_set_pin_direction(pin->number, direction);
+    gpio_set_pin_pull_mode(pin->number, GPIO_PULL_OFF);
+    gpio_set_pin_function(pin->number, pinmux);
+    if (direction == GPIO_DIRECTION_OUT) {
+        // Use strong drive strength for SPI outputs.
+        hri_port_set_PINCFG_DRVSTR_bit(PORT, (enum gpio_port)GPIO_PORT(pin->number), GPIO_PIN(pin->number));
+    }
+    claim_pin(pin);
+}
 
 void common_hal_busio_spi_construct(busio_spi_obj_t *self,
     const mcu_pin_obj_t *clock, const mcu_pin_obj_t *mosi,
@@ -42,7 +53,7 @@ void common_hal_busio_spi_construct(busio_spi_obj_t *self,
     }
 
     // Ensure the object starts in its deinit state.
-    self->clock_pin = NO_PIN;
+    common_hal_busio_spi_mark_deinit(self);
 
     // Special case for SAMR21 boards. (feather_radiofruit_zigbee)
     #if defined(PIN_PC19F_SERCOM4_PAD0)
@@ -76,6 +87,7 @@ void common_hal_busio_spi_construct(busio_spi_obj_t *self,
             if (!samd_peripherals_valid_spi_clock_pad(clock_pad)) {
                 continue;
             }
+            // find mosi_pad first, since it corresponds to dopo which takes limited values
             for (int j = 0; j < NUM_SERCOMS_PER_PIN; j++) {
                 if (!mosi_none) {
                     if (sercom_index == mosi->sercom[j].index) {
@@ -125,6 +137,9 @@ void common_hal_busio_spi_construct(busio_spi_obj_t *self,
 
     // Pads must be set after spi_m_sync_init(), which uses default values from
     // the prototypical SERCOM.
+
+    // Set to SPI host mode and choose pads.
+    hri_sercomspi_write_CTRLA_MODE_bf(sercom, 3);
     hri_sercomspi_write_CTRLA_DOPO_bf(sercom, dopo);
     hri_sercomspi_write_CTRLA_DIPO_bf(sercom, miso_pad);
 
@@ -137,30 +152,21 @@ void common_hal_busio_spi_construct(busio_spi_obj_t *self,
         mp_raise_OSError(MP_EIO);
     }
 
-    gpio_set_pin_direction(clock->number, GPIO_DIRECTION_OUT);
-    gpio_set_pin_pull_mode(clock->number, GPIO_PULL_OFF);
-    gpio_set_pin_function(clock->number, clock_pinmux);
-    claim_pin(clock);
+    setup_pin(clock, clock_pinmux, GPIO_DIRECTION_OUT);
     self->clock_pin = clock->number;
 
     if (mosi_none) {
         self->MOSI_pin = NO_PIN;
     } else {
-        gpio_set_pin_direction(mosi->number, GPIO_DIRECTION_OUT);
-        gpio_set_pin_pull_mode(mosi->number, GPIO_PULL_OFF);
-        gpio_set_pin_function(mosi->number, mosi_pinmux);
+        setup_pin(mosi, mosi_pinmux, GPIO_DIRECTION_OUT);
         self->MOSI_pin = mosi->number;
-        claim_pin(mosi);
     }
 
     if (miso_none) {
         self->MISO_pin = NO_PIN;
     } else {
-        gpio_set_pin_direction(miso->number, GPIO_DIRECTION_IN);
-        gpio_set_pin_pull_mode(miso->number, GPIO_PULL_OFF);
-        gpio_set_pin_function(miso->number, miso_pinmux);
+        setup_pin(miso, miso_pinmux, GPIO_DIRECTION_IN);
         self->MISO_pin = miso->number;
-        claim_pin(miso);
     }
 
     spi_m_sync_enable(&self->spi_desc);
@@ -178,18 +184,24 @@ bool common_hal_busio_spi_deinited(busio_spi_obj_t *self) {
     return self->clock_pin == NO_PIN;
 }
 
+void common_hal_busio_spi_mark_deinit(busio_spi_obj_t *self) {
+    self->clock_pin = NO_PIN;
+}
+
 void common_hal_busio_spi_deinit(busio_spi_obj_t *self) {
     if (common_hal_busio_spi_deinited(self)) {
         return;
     }
     allow_reset_sercom(self->spi_desc.dev.prvt);
 
+    // Mark as deinit early in case we are used in an interrupt.
+    common_hal_busio_spi_mark_deinit(self);
+
     spi_m_sync_disable(&self->spi_desc);
     spi_m_sync_deinit(&self->spi_desc);
     reset_pin_number(self->clock_pin);
     reset_pin_number(self->MOSI_pin);
     reset_pin_number(self->MISO_pin);
-    self->clock_pin = NO_PIN;
 }
 
 bool common_hal_busio_spi_configure(busio_spi_obj_t *self,

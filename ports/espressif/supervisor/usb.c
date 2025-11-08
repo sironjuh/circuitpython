@@ -20,15 +20,7 @@
 #include "driver/gpio.h"
 #include "esp_private/periph_ctrl.h"
 
-#if defined(CONFIG_IDF_TARGET_ESP32C3)
-#include "components/esp_rom/include/esp32c3/rom/gpio.h"
-#elif defined(CONFIG_IDF_TARGET_ESP32C6)
-#include "components/esp_rom/include/esp32c6/rom/gpio.h"
-#elif defined(CONFIG_IDF_TARGET_ESP32S2)
-#include "components/esp_rom/include/esp32s2/rom/gpio.h"
-#elif defined(CONFIG_IDF_TARGET_ESP32S3)
-#include "components/esp_rom/include/esp32s3/rom/gpio.h"
-#endif
+#include "rom/gpio.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -62,31 +54,6 @@ static void usb_device_task(void *param) {
         vTaskDelay(1);
     }
 }
-
-/**
- * Callback invoked when received an "wanted" char.
- * @param itf           Interface index (for multiple cdc interfaces)
- * @param wanted_char   The wanted char (set previously)
- */
-void tud_cdc_rx_wanted_cb(uint8_t itf, char wanted_char) {
-    (void)itf;  // not used
-    // CircuitPython's VM is run in a separate FreeRTOS task from TinyUSB.
-    // So, we must notify the other task when a CTRL-C is received.
-    port_wake_main_task();
-    // Workaround for using shared/runtime/interrupt_char.c
-    // Compare mp_interrupt_char with wanted_char and ignore if not matched
-    if (mp_interrupt_char == wanted_char) {
-        tud_cdc_read_flush();    // flush read fifo
-        mp_sched_keyboard_interrupt();
-    }
-}
-
-void tud_cdc_rx_cb(uint8_t itf) {
-    (void)itf;
-    // Workaround for "press any key to enter REPL" response being delayed on espressif.
-    // Wake main task when any key is pressed.
-    port_wake_main_task();
-}
 #endif // CIRCUITPY_USB_DEVICE
 
 void init_usb_hardware(void) {
@@ -97,11 +64,9 @@ void init_usb_hardware(void) {
         .target = USB_PHY_TARGET_INT,
 
         .otg_mode = USB_OTG_MODE_DEVICE,
-        #ifdef CONFIG_IDF_TARGET_ESP32P4
-        .otg_speed = USB_PHY_SPEED_HIGH,
-        #else
-        .otg_speed = USB_PHY_SPEED_FULL,
-        #endif
+        // https://github.com/hathach/tinyusb/issues/2943#issuecomment-2601888322
+        // Set speed to undefined (auto-detect) to avoid timing/race issue with S3 with host such as macOS
+        .otg_speed = USB_PHY_SPEED_UNDEFINED,
     };
     usb_new_phy(&phy_conf, &phy_hdl);
 

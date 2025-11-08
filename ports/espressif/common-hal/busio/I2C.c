@@ -6,6 +6,7 @@
 
 #include "shared-bindings/busio/I2C.h"
 #include "py/mperrno.h"
+#include "py/mphal.h"
 #include "py/runtime.h"
 
 #include "components/driver/i2c/include/driver/i2c.h"
@@ -127,6 +128,11 @@ void common_hal_busio_i2c_deinit(busio_i2c_obj_t *self) {
     i2c_del_master_bus(self->handle);
     self->handle = NULL;
 
+    // Release the mutex before we delete it. Otherwise FreeRTOS gets unhappy.
+    xSemaphoreGive(self->xSemaphore);
+    vSemaphoreDelete(self->xSemaphore);
+    self->xSemaphore = NULL;
+
     common_hal_reset_pin(self->sda_pin);
     common_hal_reset_pin(self->scl_pin);
     common_hal_busio_i2c_mark_deinit(self);
@@ -134,6 +140,12 @@ void common_hal_busio_i2c_deinit(busio_i2c_obj_t *self) {
 
 bool common_hal_busio_i2c_probe(busio_i2c_obj_t *self, uint8_t addr) {
     esp_err_t result = i2c_master_probe(self->handle, addr, 10);
+
+    #if defined(CONFIG_IDF_TARGET_ESP32S2)
+    // ESP32-S2 gives spurious results when probe is called multiple times in succession without this delay.
+    mp_hal_delay_ms(1);
+    #endif
+
     return result == ESP_OK;
 }
 

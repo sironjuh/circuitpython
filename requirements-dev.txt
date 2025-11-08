@@ -14,7 +14,7 @@ requests-cache
 polib
 
 # For pre-commit
-black
+ruff==0.9.4 # ruff version must exactly match pre-commit-config.yaml
 pyyaml
 pre-commit
 micropython-uncrustify
@@ -25,7 +25,8 @@ intelhex
 # for building & testing natmods
 pyelftools
 
-cryptography
+# newer versions break ESP-IDF now
+cryptography<45
 
 # for web workflow minify
 minify_html
@@ -37,3 +38,6 @@ colorama
 
 # for silabs builds
 setuptools
+
+# For zephyr port
+tomlkit
